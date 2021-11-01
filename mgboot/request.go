@@ -6,6 +6,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/utils"
+	"github.com/meiguonet/mgboot-go-common/AppConf"
 	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
 	"github.com/meiguonet/mgboot-go-common/util/castx"
 	"github.com/meiguonet/mgboot-go-common/util/jsonx"
@@ -79,6 +80,10 @@ func (r *Request) GetMethod(ctx *fiber.Ctx) string {
 }
 
 func (r *Request) GetHeaders(ctx *fiber.Ctx) map[string]string {
+	if AppConf.GetBoolean("logging.logGetHeaders") {
+		RuntimeLogger().Debug("raw headers: " + string(ctx.Request().Header.RawHeaders()))
+	}
+
 	buf := make([]byte, 0, len(ctx.Request().Header.RawHeaders()))
 	copy(ctx.Request().Header.RawHeaders(), buf)
 	reader := bufio.NewReader(bytes.NewReader(buf))
@@ -121,6 +126,10 @@ func (r *Request) GetQueryParams(ctx *fiber.Ctx) map[string]string {
 
 	if len(buf) < 1 {
 		return map1
+	}
+
+	if AppConf.GetBoolean("logging.logGetQueryParams") {
+		RuntimeLogger().Debug("query params: " + string(buf))
 	}
 
 	parts := strings.Split(string(buf), "&")
@@ -210,6 +219,10 @@ func (r *Request) GetFormData(ctx *fiber.Ctx) map[string]string {
 
 	if err != nil {
 		return map1
+	}
+
+	if AppConf.GetBoolean("logging.logGetFormData") {
+		RuntimeLogger().Debug("form data: " + jsonx.ToJson(form.Value))
 	}
 
 	for name, values := range form.Value {
@@ -648,6 +661,47 @@ func (r *Request) JwtClaimIntSlice(ctx *fiber.Ctx, name string) []int {
 }
 
 func (r *Request) GetRawBody(ctx *fiber.Ctx) []byte {
+	method := ctx.Method()
+	contentType := strings.ToLower(r.GetHeader(ctx, fiber.HeaderContentType))
+	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
+	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
+
+	if method == "POST" && (isPostForm || isMultipartForm) {
+		formData := r.GetFormData(ctx)
+
+		if len(formData) < 1 {
+			return make([]byte, 0)
+		}
+
+		values := url.Values{}
+
+		for name, value := range formData {
+			values[name] = []string{value}
+		}
+
+		contents := values.Encode()
+
+		if AppConf.GetBoolean("logging.logGetRawBody") {
+			RuntimeLogger().Debug("raw body: " + contents)
+		}
+
+		return []byte(contents)
+	}
+
+	methods := []string{"POST", "PUT", "PATCH", "DELETE"}
+
+	if !slicex.InStringSlice(method, methods) {
+		return make([]byte, 0)
+	}
+
+	isJson := strings.Contains(contentType, fiber.MIMEApplicationJSON)
+	isXml1 := strings.Contains(contentType, fiber.MIMEApplicationXML)
+	isXml2 := strings.Contains(contentType, fiber.MIMETextXML)
+
+	if !isJson && !isXml1 && !isXml2 {
+		return make([]byte, 0)
+	}
+
 	var err error
 	var encoding string
 	var body []byte
@@ -675,6 +729,11 @@ func (r *Request) GetRawBody(ctx *fiber.Ctx) []byte {
 
 	buf := make([]byte, 0, len(body))
 	copy(body, buf)
+
+	if AppConf.GetBoolean("logging.logGetRawBody") {
+		RuntimeLogger().Debug("raw body: " + string(buf))
+	}
+
 	return buf
 }
 
@@ -723,4 +782,8 @@ func (r *Request) GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interf
 	}
 
 	return mapx.FromRequestParam(map1, rules...)
+}
+
+func (r *Request) DtoBind(ctx *fiber.Ctx, dto interface{}) error {
+	return mapx.BindToDto(r.GetMap(ctx), dto)
 }
