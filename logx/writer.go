@@ -19,10 +19,10 @@ func (w *writer) Write(buf []byte) (int, error) {
 	wg.Add(len(w.appenders))
 
 	for _, a := range w.appenders {
-		go func(wg *sync.WaitGroup, buf []byte) {
+		go func(a appender) {
 			defer wg.Done()
 			_, _ = a.Write(buf)
-		}(wg, buf)
+		}(a)
 	}
 
 	return len(buf), nil
