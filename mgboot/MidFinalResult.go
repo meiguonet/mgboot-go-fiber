@@ -2,10 +2,15 @@ package mgboot
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/meiguonet/mgboot-go-common/AppConf"
 )
 
 func MidFinalResult() func(ctx *fiber.Ctx) error {
 	return func(ctx *fiber.Ctx) error {
+		if AppConf.GetBoolean("logging.logMiddlewareRun") {
+			RuntimeLogger().Info("middleware run: mgboot.MidFinalResult")
+		}
+
 		LogExecuteTime(ctx)
 		AddCorsSupport(ctx)
 		AddPoweredBy(ctx)

@@ -8,7 +8,6 @@ import (
 	"github.com/meiguonet/mgboot-go-common/util/jsonx"
 	"github.com/meiguonet/mgboot-go-dal/poolx"
 	"github.com/meiguonet/mgboot-go-fiber/cachex"
-	"github.com/meiguonet/mgboot-go-fiber/enum/TimeUnit"
 	"github.com/meiguonet/mgboot-go-fiber/mgboot"
 	"github.com/robfig/cron/v3"
 	"strings"
@@ -188,7 +187,6 @@ func RunMqTask(payload string) {
 	}
 
 	retryDuration := time.Duration(retryInterval) * time.Millisecond
-	loc, _ := time.LoadLocation("Asia/Shanghai")
 
 	policy := NewRetryPolicy(map[string]interface{}{
 		"failTimes":     failTimes,
@@ -196,7 +194,7 @@ func RunMqTask(payload string) {
 		"retryInterval": retryDuration,
 	})
 
-	PublishDelayable(task, time.Now().In(loc).Add(retryDuration), policy)
+	PublishDelayable(task, retryDuration, policy)
 }
 
 func WithCronTasks(task CronTask) {
@@ -271,7 +269,7 @@ func Publish(task Task, policy ...*retryPolicy) {
 	MqTaskLogger().Info(strings.Join(sb, ""))
 }
 
-func PublishDelayable(task Task, runAt time.Time, policy ...*retryPolicy) {
+func PublishDelayable(task Task, runAfter time.Duration, policy ...*retryPolicy) {
 	var rp *retryPolicy
 
 	if len(policy) > 0 {
@@ -279,10 +277,11 @@ func PublishDelayable(task Task, runAt time.Time, policy ...*retryPolicy) {
 	}
 
 	loc, _ := time.LoadLocation("Asia/Shanghai")
+	runAt := time.Now().In(loc).Add(runAfter)
 
 	payload := map[string]interface{}{
 		"taskName": task.GetTaskName(),
-		"runAt":    runAt.In(loc).Format(DatetimeFormat.Full),
+		"runAt":    runAt.Format(DatetimeFormat.Full),
 	}
 
 	if len(task.GetTaskParams()) > 0 {
@@ -319,7 +318,7 @@ func PublishDelayable(task Task, runAt time.Time, policy ...*retryPolicy) {
 	msg := fmt.Sprintf(
 		"to publish delayable task: %s, scheduled at: %s",
 		task.GetTaskName(),
-		runAt.In(loc).Format(DatetimeFormat.Full),
+		runAt.Format(DatetimeFormat.Full),
 	)
 
 	sb = append(sb, msg)
@@ -331,33 +330,16 @@ func PublishDelayable(task Task, runAt time.Time, policy ...*retryPolicy) {
 	MqTaskLogger().Info(strings.Join(sb, ""))
 }
 
-func PublishWithDelayamount(task Task, amount, timeUnit int, policy ...*retryPolicy) {
-	var d1 time.Duration
-
-	switch timeUnit {
-	case TimeUnit.MillSeconds:
-		d1 = time.Duration(amount) * time.Millisecond
-	case TimeUnit.Seconds:
-		d1 = time.Duration(amount) * time.Second
-	case TimeUnit.Minutes:
-		d1 = time.Duration(amount) * time.Minute
-	case TimeUnit.Hours:
-		d1 = time.Duration(amount) * time.Hour
-	case TimeUnit.Days:
-		d1 = time.Duration(amount * 24) * time.Hour
-	}
-
-	if d1 < 1 {
-		return
-	}
-
-	loc, _ := time.LoadLocation("Asia/Shanghai")
-	runAt := time.Now().In(loc).Add(d1)
-	PublishDelayable(task, runAt, policy...)
-}
-
 func HandleCronTasks(crond *cron.Cron) {
 	for _, task := range cronTasks {
 		crond.AddJob(task.GetSpec(), NewCronJob(task.GetTaskName()))
 	}
+}
+
+func HandleRedismqNormalTasks(crond *cron.Cron) {
+	crond.AddJob("@every 1s", &redismqNormalTaskHandler{})
+}
+
+func HandleRedismqDelayableTasks(crond *cron.Cron) {
+	crond.AddJob("@every 1s", &redismqDelayableTaskHandler{})
 }

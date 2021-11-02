@@ -2,6 +2,7 @@ package mgboot
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/meiguonet/mgboot-go-common/AppConf"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
 	"github.com/meiguonet/mgboot-go-fiber/enum/JwtVerifyErrno"
 	"regexp"
@@ -10,6 +11,10 @@ import (
 
 func MidJwtAuth() func(ctx *fiber.Ctx) error {
 	return func(ctx *fiber.Ctx) error {
+		if AppConf.GetBoolean("logging.logMiddlewareRun") {
+			RuntimeLogger().Info("middleware run: mgboot.MidJwtAuth")
+		}
+
 		var req *Request
 
 		if r, ok := ctx.Locals("request").(*Request); ok {

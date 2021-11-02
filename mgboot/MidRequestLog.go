@@ -3,10 +3,15 @@ package mgboot
 import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/meiguonet/mgboot-go-common/AppConf"
 )
 
 func MidRequestLog() func(ctx *fiber.Ctx) error {
 	return func(ctx *fiber.Ctx) error {
+		if AppConf.GetBoolean("logging.logMiddlewareRun") {
+			RuntimeLogger().Info("middleware run: mgboot.MidRequestLog")
+		}
+
 		if !RequestLogEnabled() {
 			return ctx.Next()
 		}
