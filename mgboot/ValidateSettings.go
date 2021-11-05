@@ -2,7 +2,9 @@ package mgboot
 
 import (
 	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
-	"regexp"
+	"github.com/meiguonet/mgboot-go-common/util/castx"
+	"github.com/meiguonet/mgboot-go-common/util/stringx"
+	"strings"
 )
 
 type ValidateSettings struct {
@@ -10,18 +12,53 @@ type ValidateSettings struct {
 	failfast bool
 }
 
-// @param string[]|string rules
-func NewValidateSettings(rules interface{}, failfast bool) *ValidateSettings {
-	var _rules []string
-
-	if a1, ok := rules.([]string); ok {
-		_rules = a1
-	} else if s1, ok := rules.(string); ok && s1 != "" {
-		re := regexp.MustCompile(RegexConst.CommaSep)
-		_rules = re.Split(s1, -1)
+func NewValidateSettings(settings interface{}) *ValidateSettings {
+	if map1, ok := settings.(map[string]interface{}); ok && len(map1) > 0 {
+		return newValidateSettingsFromMap(map1)
 	}
 
-	return &ValidateSettings{rules: _rules, failfast: failfast}
+	if s1, ok := settings.(string); ok && s1 != "" {
+		return newValidateSettingsFromString(s1)
+	}
+
+	return &ValidateSettings{rules: make([]string, 0)}
+}
+
+func newValidateSettingsFromMap(settings map[string]interface{}) *ValidateSettings {
+	rules := make([]string, 0)
+
+	if a1, ok := settings["rules"].([]string); ok && len(a1) > 0 {
+		rules = a1
+	} else if s1, ok := settings["rules"].(string); ok && s1 != "" {
+		rules = stringx.SplitWithRegexp(s1, RegexConst.CommaSep)
+	}
+
+	var failfast bool
+
+	if b1, ok := settings["failfast"].(bool); ok {
+		failfast = b1
+	}
+
+	return &ValidateSettings{rules: rules, failfast: failfast}
+}
+
+func newValidateSettingsFromString(defines string) *ValidateSettings {
+	if strings.Contains(defines, "Validate:") {
+		defines = strings.TrimPrefix(defines, "Validate:")
+	}
+
+	defines = strings.ReplaceAll(defines, "#@#", ",")
+	parts := strings.Split(defines, "~@~")
+	rules := stringx.SplitWithRegexp(parts[0], RegexConst.CommaSep)
+	var failfast bool
+
+	if len(parts) > 1 {
+		if b1, err := castx.ToBoolE(parts[1]); err == nil {
+			failfast = b1
+		}
+	}
+
+	return &ValidateSettings{rules: rules, failfast: failfast}
 }
 
 func (st *ValidateSettings) Rules() []string {

@@ -12,19 +12,15 @@ func MidValidate() func(ctx *fiber.Ctx) error {
 			RuntimeLogger().Info("middleware run: mgboot.MidValidate")
 		}
 
-		var req *Request
+		req := NewRequest(ctx)
+		settings := FindMatchedValidateSettings(req)
 
-		if r, ok := ctx.Locals("request").(*Request); ok {
-			req = r
-		}
-
-		if req == nil || req.ValidateSettings() == nil {
+		if settings == nil || len(settings.rules) < 1 {
 			return ctx.Next()
 		}
 
-		settings := req.ValidateSettings()
 		validator := validatex.NewValidator()
-		data := req.GetMap(ctx)
+		data := req.GetMap()
 
 		if settings.Failfast() {
 			errorTips := validatex.FailfastValidate(validator, data, settings.Rules())

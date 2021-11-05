@@ -13,21 +13,21 @@ func MidRateLimit() func(ctx *fiber.Ctx) error {
 			RuntimeLogger().Info("middleware run: mgboot.MidRateLimit")
 		}
 
-		var req *Request
+		req := NewRequest(ctx)
+		id := FindMatchedHandlerName(req)
 
-		if r, ok := ctx.Locals("request").(*Request); ok {
-			req = r
-		}
-
-		if req == nil || req.RateLimitSettings() == nil {
+		if id == "" {
 			return ctx.Next()
 		}
 
-		settings := req.RateLimitSettings()
-		id := req.HandlerFuncName()
+		settings := FindMatchedRateLimitSettings(req)
+
+		if settings == nil {
+			return ctx.Next()
+		}
 
 		if settings.LimitByIp() {
-			id += "@" + req.GetClientIp(ctx)
+			id += "@" + req.GetClientIp()
 		}
 
 		opts := ratelimiter.NewRatelimiterOptions(RatelimiterLuaFile(), RatelimiterCacheDir())

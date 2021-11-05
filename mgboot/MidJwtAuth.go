@@ -3,9 +3,9 @@ package mgboot
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
+	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
 	"github.com/meiguonet/mgboot-go-fiber/enum/JwtVerifyErrno"
-	"regexp"
 	"strings"
 )
 
@@ -15,25 +15,21 @@ func MidJwtAuth() func(ctx *fiber.Ctx) error {
 			RuntimeLogger().Info("middleware run: mgboot.MidJwtAuth")
 		}
 
-		var req *Request
+		req := NewRequest(ctx)
+		authSettings := FindMatchedJwtAuthSettings(req)
 
-		if r, ok := ctx.Locals("request").(*Request); ok {
-			req = r
-		}
-
-		if req == nil || req.JwtAuthSettings() == nil {
+		if authSettings == nil {
 			return ctx.Next()
 		}
 
-		settings := GetJwtSettings(req.JwtAuthSettings().Key())
+		settings := GetJwtSettings(authSettings.Key())
 
 		if settings == nil {
 			return ctx.Next()
 		}
 
 		token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-		re := regexp.MustCompile(`[\x20\t]+`)
-		token = re.ReplaceAllString(token, " ")
+		token = stringx.RegexReplace(token, RegexConst.SpaceSep, " ")
 
 		if strings.Contains(token, " ") {
 			token = stringx.SubstringAfter(token, " ")

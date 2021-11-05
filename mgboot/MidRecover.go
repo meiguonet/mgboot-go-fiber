@@ -29,11 +29,6 @@ func MidRecover() func(ctx *fiber.Ctx) error {
 		}()
 
 		err = ctx.Next()
-
-		if err != nil {
-			return err
-		}
-
-		return ctx.Next()
+		return err
 	}
 }

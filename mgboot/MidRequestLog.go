@@ -1,9 +1,9 @@
 package mgboot
 
 import (
-	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
+	"strings"
 )
 
 func MidRequestLog() func(ctx *fiber.Ctx) error {
@@ -16,29 +16,18 @@ func MidRequestLog() func(ctx *fiber.Ctx) error {
 			return ctx.Next()
 		}
 
-		var req *Request
-
-		if r, ok := ctx.Locals("request").(*Request); ok {
-			req = r
-		}
-
-		if req == nil {
-			return ctx.Next()
-		}
-
+		req := NewRequest(ctx)
 		logger := RequestLogLogger()
-
-		msg := fmt.Sprintf(
-			"%s %s from %s",
-			ctx.Method(),
-			req.GetRequestUrl(ctx, true),
-			req.GetClientIp(ctx),
-		)
-
-		logger.Info(msg)
+		sb := strings.Builder{}
+		sb.WriteString(ctx.Method())
+		sb.WriteString(" ")
+		sb.WriteString(req.GetRequestUrl(true))
+		sb.WriteString(" from ")
+		sb.WriteString(req.GetClientIp())
+		logger.Info(sb.String())
 
 		if LogRequestBody() {
-			rawBody := req.GetRawBody(ctx)
+			rawBody := req.GetRawBody()
 
 			if len(rawBody) > 0 {
 				logger.Debugf(string(rawBody))

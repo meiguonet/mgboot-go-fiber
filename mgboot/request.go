@@ -14,78 +14,31 @@ import (
 	"github.com/meiguonet/mgboot-go-common/util/slicex"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
 	"math"
+	"mime/multipart"
 	"net/url"
 	"regexp"
 	"strings"
 )
 
 type Request struct {
-	handlerFuncName   string
-	rateLimitSettings *RateLimitSettings
-	jwtAuthSettings   *JwtAuthSettings
-	validateSettings  *ValidateSettings
+	ctx *fiber.Ctx
 }
 
-func NewRequest(settings map[string]interface{}) *Request {
-	var handlerFuncName string
-
-	if s1, ok := settings["handlerFuncName"].(string); ok {
-		handlerFuncName = s1
-	}
-
-	var rateLimitSettings *RateLimitSettings
-
-	if st, ok := settings["rateLimitSettings"].(*RateLimitSettings); ok {
-		rateLimitSettings = st
-	}
-
-	var jwtAuthSettings *JwtAuthSettings
-
-	if st, ok := settings["jwtAuthSettings"].(*JwtAuthSettings); ok {
-		jwtAuthSettings = st
-	}
-
-	var validateSettings *ValidateSettings
-
-	if st, ok := settings["validateSettings"].(*ValidateSettings); ok {
-		validateSettings = st
-	}
-
-	return &Request{
-		handlerFuncName:   handlerFuncName,
-		rateLimitSettings: rateLimitSettings,
-		jwtAuthSettings:   jwtAuthSettings,
-		validateSettings:  validateSettings,
-	}
+func NewRequest(ctx *fiber.Ctx) *Request {
+	return &Request{ctx: ctx}
 }
 
-func (r *Request) HandlerFuncName() string {
-	return r.handlerFuncName
+func (r *Request) GetMethod() string {
+	return r.ctx.Method()
 }
 
-func (r *Request) RateLimitSettings() *RateLimitSettings {
-	return r.rateLimitSettings
-}
-
-func (r *Request) JwtAuthSettings() *JwtAuthSettings {
-	return r.jwtAuthSettings
-}
-
-func (r *Request) ValidateSettings() *ValidateSettings {
-	return r.validateSettings
-}
-
-func (r *Request) GetMethod(ctx *fiber.Ctx) string {
-	return ctx.Method()
-}
-
-func (r *Request) GetHeaders(ctx *fiber.Ctx) map[string]string {
+func (r *Request) GetHeaders() map[string]string {
 	if AppConf.GetBoolean("logging.logGetHeaders") {
-		RuntimeLogger().Debug("raw headers: " + string(ctx.Request().Header.RawHeaders()))
+		RuntimeLogger().Debug("raw headers: " + string(r.ctx.Request().Header.RawHeaders()))
 	}
 
-	buf := make([]byte, 0, len(ctx.Request().Header.RawHeaders()))
-	copy(ctx.Request().Header.RawHeaders(), buf)
+	buf := make([]byte, 0, len(r.ctx.Request().Header.RawHeaders()))
+	copy(r.ctx.Request().Header.RawHeaders(), buf)
 	reader := bufio.NewReader(bytes.NewReader(buf))
 	headers := map[string]string{}
 
@@ -116,13 +69,13 @@ func (r *Request) GetHeaders(ctx *fiber.Ctx) map[string]string {
 	return headers
 }
 
-func (r *Request) GetHeader(ctx *fiber.Ctx, name string) string {
-	return ctx.Get(name)
+func (r *Request) GetHeader(name string) string {
+	return r.ctx.Get(name)
 }
 
-func (r *Request) GetQueryParams(ctx *fiber.Ctx) map[string]string {
+func (r *Request) GetQueryParams() map[string]string {
 	map1 := map[string]string{}
-	buf := ctx.Request().URI().QueryString()
+	buf := r.ctx.Request().URI().QueryString()
 
 	if len(buf) < 1 {
 		return map1
@@ -152,8 +105,8 @@ func (r *Request) GetQueryParams(ctx *fiber.Ctx) map[string]string {
 	return map1
 }
 
-func (r *Request) GetQueryString(ctx *fiber.Ctx, urlencode ...bool) string {
-	params := r.GetQueryParams(ctx)
+func (r *Request) GetQueryString(urlencode ...bool) string {
+	params := r.GetQueryParams()
 
 	if len(params) < 1 {
 		return ""
@@ -185,8 +138,8 @@ func (r *Request) GetQueryString(ctx *fiber.Ctx, urlencode ...bool) string {
 	return sb.String()
 }
 
-func (r *Request) GetRequestUrl(ctx *fiber.Ctx, withQueryString ...bool) string {
-	buf := ctx.Request().URI().Path()
+func (r *Request) GetRequestUrl(withQueryString ...bool) string {
+	buf := r.ctx.Request().URI().Path()
 	var s1 string
 
 	if len(buf) < 1 {
@@ -196,7 +149,7 @@ func (r *Request) GetRequestUrl(ctx *fiber.Ctx, withQueryString ...bool) string 
 	}
 
 	if len(withQueryString) > 0 && withQueryString[0] {
-		qs := r.GetQueryString(ctx)
+		qs := r.GetQueryString()
 
 		if qs != "" {
 			s1 += "?" + qs
@@ -206,16 +159,16 @@ func (r *Request) GetRequestUrl(ctx *fiber.Ctx, withQueryString ...bool) string 
 	return s1
 }
 
-func (r *Request) GetFormData(ctx *fiber.Ctx) map[string]string {
+func (r *Request) GetFormData() map[string]string {
 	map1 := map[string]string{}
-	contentType := ctx.Get(fiber.HeaderContentType)
+	contentType := r.ctx.Get(fiber.HeaderContentType)
 	contentTypes := []string{fiber.MIMEApplicationForm, fiber.MIMEMultipartForm}
 
-	if ctx.Method() != "POST" || !slicex.InStringSlice(contentType, contentTypes) {
+	if r.ctx.Method() != "POST" || !slicex.InStringSlice(contentType, contentTypes) {
 		return map1
 	}
 
-	form, err := ctx.MultipartForm()
+	form, err := r.ctx.MultipartForm()
 
 	if err != nil {
 		return map1
@@ -236,15 +189,15 @@ func (r *Request) GetFormData(ctx *fiber.Ctx) map[string]string {
 	return map1
 }
 
-func (r *Request) GetClientIp(ctx *fiber.Ctx) string {
-	ip := ctx.Get(fiber.HeaderXForwardedFor)
+func (r *Request) GetClientIp() string {
+	ip := r.ctx.Get(fiber.HeaderXForwardedFor)
 
 	if ip == "" {
-		ip = ctx.Get("X-Real-IP")
+		ip = r.ctx.Get("X-Real-IP")
 	}
 
 	if ip == "" {
-		ip = ctx.IP()
+		ip = r.ctx.IP()
 	}
 
 	regex1 := regexp.MustCompile(RegexConst.CommaSep)
@@ -257,17 +210,19 @@ func (r *Request) GetClientIp(ctx *fiber.Ctx) string {
 	return strings.TrimSpace(parts[0])
 }
 
-func (r *Request) PathvariableString(ctx *fiber.Ctx, name string, defaultValue ...string) string {
+func (r *Request) PathvariableString(name string, defaultValue ...interface{}) string {
 	var dv string
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if s1, err := castx.ToStringE(defaultValue[0]); err == nil {
+			dv = s1
+		}
 	}
 
-	return ctx.Params(name, dv)
+	return r.ctx.Params(name, dv)
 }
 
-func (r *Request) PathvariableBool(ctx *fiber.Ctx, name string, defaultValue ...string) bool {
+func (r *Request) PathvariableBool(name string, defaultValue ...interface{}) bool {
 	var dv bool
 
 	if len(defaultValue) > 0 {
@@ -276,14 +231,14 @@ func (r *Request) PathvariableBool(ctx *fiber.Ctx, name string, defaultValue ...
 		}
 	}
 
-	if b1, err := castx.ToBoolE(ctx.Params(name)); err == nil {
+	if b1, err := castx.ToBoolE(r.ctx.Params(name)); err == nil {
 		return b1
 	}
 
 	return dv
 }
 
-func (r *Request) PathvariableInt(ctx *fiber.Ctx, name string, defaultValue ...interface{}) int {
+func (r *Request) PathvariableInt(name string, defaultValue ...interface{}) int {
 	dv := math.MinInt32
 
 	if len(defaultValue) > 0 {
@@ -292,10 +247,10 @@ func (r *Request) PathvariableInt(ctx *fiber.Ctx, name string, defaultValue ...i
 		}
 	}
 
-	return castx.ToInt(ctx.Params(name), dv)
+	return castx.ToInt(r.ctx.Params(name), dv)
 }
 
-func (r *Request) PathvariableInt64(ctx *fiber.Ctx, name string, defaultValue ...interface{}) int64 {
+func (r *Request) PathvariableInt64(name string, defaultValue ...interface{}) int64 {
 	dv := int64(math.MinInt64)
 
 	if len(defaultValue) > 0 {
@@ -304,10 +259,10 @@ func (r *Request) PathvariableInt64(ctx *fiber.Ctx, name string, defaultValue ..
 		}
 	}
 
-	return castx.ToInt64(ctx.Params(name), dv)
+	return castx.ToInt64(r.ctx.Params(name), dv)
 }
 
-func (r *Request) PathvariableFloat32(ctx *fiber.Ctx, name string, defaultValue ...interface{}) float32 {
+func (r *Request) PathvariableFloat32(name string, defaultValue ...interface{}) float32 {
 	dv := float32(math.SmallestNonzeroFloat32)
 
 	if len(defaultValue) > 0 {
@@ -316,10 +271,10 @@ func (r *Request) PathvariableFloat32(ctx *fiber.Ctx, name string, defaultValue 
 		}
 	}
 
-	return castx.ToFloat32(ctx.Params(name), dv)
+	return castx.ToFloat32(r.ctx.Params(name), dv)
 }
 
-func (r *Request) PathvariableFloat64(ctx *fiber.Ctx, name string, defaultValue ...interface{}) float64 {
+func (r *Request) PathvariableFloat64(name string, defaultValue ...interface{}) float64 {
 	dv := math.SmallestNonzeroFloat64
 
 	if len(defaultValue) > 0 {
@@ -328,23 +283,25 @@ func (r *Request) PathvariableFloat64(ctx *fiber.Ctx, name string, defaultValue 
 		}
 	}
 
-	return castx.ToFloat64(ctx.Params(name), dv)
+	return castx.ToFloat64(r.ctx.Params(name), dv)
 }
 
-func (r *Request) ParamString(ctx *fiber.Ctx, name string, defaultValue ...string) string {
+func (r *Request) ParamString(name string, defaultValue ...interface{}) string {
 	var dv string
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if s1, err := castx.ToStringE(defaultValue[0]); err == nil {
+			dv = s1
+		}
 	}
 
 	map1 := map[string]string{}
 
-	for name, value := range r.GetQueryParams(ctx) {
+	for name, value := range r.GetQueryParams() {
 		map1[name] = value
 	}
 
-	for name, value := range r.GetFormData(ctx) {
+	for name, value := range r.GetFormData() {
 		map1[name] = value
 	}
 
@@ -355,7 +312,7 @@ func (r *Request) ParamString(ctx *fiber.Ctx, name string, defaultValue ...strin
 	return dv
 }
 
-func (r *Request) ParamBool(ctx *fiber.Ctx, name string, defaultValue ...string) bool {
+func (r *Request) ParamBool(name string, defaultValue ...interface{}) bool {
 	var dv bool
 
 	if len(defaultValue) > 0 {
@@ -366,11 +323,11 @@ func (r *Request) ParamBool(ctx *fiber.Ctx, name string, defaultValue ...string)
 
 	map1 := map[string]string{}
 
-	for name, value := range r.GetQueryParams(ctx) {
+	for name, value := range r.GetQueryParams() {
 		map1[name] = value
 	}
 
-	for name, value := range r.GetFormData(ctx) {
+	for name, value := range r.GetFormData() {
 		map1[name] = value
 	}
 
@@ -381,7 +338,7 @@ func (r *Request) ParamBool(ctx *fiber.Ctx, name string, defaultValue ...string)
 	return dv
 }
 
-func (r *Request) ParamInt(ctx *fiber.Ctx, name string, defaultValue ...interface{}) int {
+func (r *Request) ParamInt(name string, defaultValue ...interface{}) int {
 	dv := math.MinInt32
 
 	if len(defaultValue) > 0 {
@@ -392,18 +349,18 @@ func (r *Request) ParamInt(ctx *fiber.Ctx, name string, defaultValue ...interfac
 
 	map1 := map[string]string{}
 
-	for name, value := range r.GetQueryParams(ctx) {
+	for name, value := range r.GetQueryParams() {
 		map1[name] = value
 	}
 
-	for name, value := range r.GetFormData(ctx) {
+	for name, value := range r.GetFormData() {
 		map1[name] = value
 	}
 
 	return castx.ToInt(map1[name], dv)
 }
 
-func (r *Request) ParamInt64(ctx *fiber.Ctx, name string, defaultValue ...interface{}) int64 {
+func (r *Request) ParamInt64(name string, defaultValue ...interface{}) int64 {
 	dv := int64(math.MinInt64)
 
 	if len(defaultValue) > 0 {
@@ -414,18 +371,18 @@ func (r *Request) ParamInt64(ctx *fiber.Ctx, name string, defaultValue ...interf
 
 	map1 := map[string]string{}
 
-	for name, value := range r.GetQueryParams(ctx) {
+	for name, value := range r.GetQueryParams() {
 		map1[name] = value
 	}
 
-	for name, value := range r.GetFormData(ctx) {
+	for name, value := range r.GetFormData() {
 		map1[name] = value
 	}
 
 	return castx.ToInt64(map1[name], dv)
 }
 
-func (r *Request) ParamFloat32(ctx *fiber.Ctx, name string, defaultValue ...interface{}) float32 {
+func (r *Request) ParamFloat32(name string, defaultValue ...interface{}) float32 {
 	dv := float32(math.SmallestNonzeroFloat32)
 
 	if len(defaultValue) > 0 {
@@ -436,18 +393,18 @@ func (r *Request) ParamFloat32(ctx *fiber.Ctx, name string, defaultValue ...inte
 
 	map1 := map[string]string{}
 
-	for name, value := range r.GetQueryParams(ctx) {
+	for name, value := range r.GetQueryParams() {
 		map1[name] = value
 	}
 
-	for name, value := range r.GetFormData(ctx) {
+	for name, value := range r.GetFormData() {
 		map1[name] = value
 	}
 
 	return castx.ToFloat32(map1[name], dv)
 }
 
-func (r *Request) ParamFloat64(ctx *fiber.Ctx, name string, defaultValue ...interface{}) float64 {
+func (r *Request) ParamFloat64(name string, defaultValue ...interface{}) float64 {
 	dv := math.SmallestNonzeroFloat64
 
 	if len(defaultValue) > 0 {
@@ -458,21 +415,20 @@ func (r *Request) ParamFloat64(ctx *fiber.Ctx, name string, defaultValue ...inte
 
 	map1 := map[string]string{}
 
-	for name, value := range r.GetQueryParams(ctx) {
+	for name, value := range r.GetQueryParams() {
 		map1[name] = value
 	}
 
-	for name, value := range r.GetFormData(ctx) {
+	for name, value := range r.GetFormData() {
 		map1[name] = value
 	}
 
 	return castx.ToFloat64(map1[name], dv)
 }
 
-func (r *Request) GetJwt(ctx *fiber.Ctx) *jwt.Token {
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+func (r *Request) GetJwt() *jwt.Token {
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -486,16 +442,17 @@ func (r *Request) GetJwt(ctx *fiber.Ctx) *jwt.Token {
 	return tk
 }
 
-func (r *Request) JwtClaimString(ctx *fiber.Ctx, name string, defaultValue ...string) string {
+func (r *Request) JwtClaimString(name string, defaultValue ...interface{}) string {
 	var dv string
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if s1, err := castx.ToStringE(defaultValue[0]); err == nil {
+			dv = s1
+		}
 	}
 
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -508,7 +465,7 @@ func (r *Request) JwtClaimString(ctx *fiber.Ctx, name string, defaultValue ...st
 	return JwtClaimString(token, name, dv)
 }
 
-func (r *Request) JwtClaimBool(ctx *fiber.Ctx, name string, defaultValue ...string) bool {
+func (r *Request) JwtClaimBool(name string, defaultValue ...interface{}) bool {
 	var dv bool
 
 	if len(defaultValue) > 0 {
@@ -517,9 +474,8 @@ func (r *Request) JwtClaimBool(ctx *fiber.Ctx, name string, defaultValue ...stri
 		}
 	}
 
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -532,7 +488,7 @@ func (r *Request) JwtClaimBool(ctx *fiber.Ctx, name string, defaultValue ...stri
 	return JwtClaimBool(token, name, dv)
 }
 
-func (r *Request) JwtClaimInt(ctx *fiber.Ctx, name string, defaultValue ...interface{}) int {
+func (r *Request) JwtClaimInt(name string, defaultValue ...interface{}) int {
 	dv := math.MinInt32
 
 	if len(defaultValue) > 0 {
@@ -541,9 +497,8 @@ func (r *Request) JwtClaimInt(ctx *fiber.Ctx, name string, defaultValue ...inter
 		}
 	}
 
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -556,7 +511,7 @@ func (r *Request) JwtClaimInt(ctx *fiber.Ctx, name string, defaultValue ...inter
 	return JwtClaimInt(token, name, dv)
 }
 
-func (r *Request) JwtClaimInt64(ctx *fiber.Ctx, name string, defaultValue ...interface{}) int64 {
+func (r *Request) JwtClaimInt64(name string, defaultValue ...interface{}) int64 {
 	dv := int64(math.MinInt64)
 
 	if len(defaultValue) > 0 {
@@ -565,9 +520,8 @@ func (r *Request) JwtClaimInt64(ctx *fiber.Ctx, name string, defaultValue ...int
 		}
 	}
 
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -580,7 +534,7 @@ func (r *Request) JwtClaimInt64(ctx *fiber.Ctx, name string, defaultValue ...int
 	return JwtClaimInt64(token, name, dv)
 }
 
-func (r *Request) JwtClaimFloat32(ctx *fiber.Ctx, name string, defaultValue ...interface{}) float32 {
+func (r *Request) JwtClaimFloat32(name string, defaultValue ...interface{}) float32 {
 	dv := float32(math.SmallestNonzeroFloat32)
 
 	if len(defaultValue) > 0 {
@@ -589,9 +543,8 @@ func (r *Request) JwtClaimFloat32(ctx *fiber.Ctx, name string, defaultValue ...i
 		}
 	}
 
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -604,7 +557,7 @@ func (r *Request) JwtClaimFloat32(ctx *fiber.Ctx, name string, defaultValue ...i
 	return JwtClaimFloat32(token, name, dv)
 }
 
-func (r *Request) JwtClaimFloat64(ctx *fiber.Ctx, name string, defaultValue ...interface{}) float64 {
+func (r *Request) JwtClaimFloat64(name string, defaultValue ...interface{}) float64 {
 	dv := math.SmallestNonzeroFloat64
 
 	if len(defaultValue) > 0 {
@@ -613,9 +566,8 @@ func (r *Request) JwtClaimFloat64(ctx *fiber.Ctx, name string, defaultValue ...i
 		}
 	}
 
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -628,10 +580,9 @@ func (r *Request) JwtClaimFloat64(ctx *fiber.Ctx, name string, defaultValue ...i
 	return JwtClaimFloat64(token, name, dv)
 }
 
-func (r *Request) JwtClaimStringSlice(ctx *fiber.Ctx, name string) []string {
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+func (r *Request) JwtClaimStringSlice(name string) []string {
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -644,10 +595,9 @@ func (r *Request) JwtClaimStringSlice(ctx *fiber.Ctx, name string) []string {
 	return JwtClaimStringSlice(token, name)
 }
 
-func (r *Request) JwtClaimIntSlice(ctx *fiber.Ctx, name string) []int {
-	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
-	re := regexp.MustCompile(`[\x20\t]+`)
-	token = re.ReplaceAllString(token, " ")
+func (r *Request) JwtClaimIntSlice(name string) []int {
+	token := strings.TrimSpace(r.ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, `[\x20\t]+`, " ")
 
 	if strings.Contains(token, " ") {
 		token = stringx.SubstringAfter(token, " ")
@@ -660,14 +610,14 @@ func (r *Request) JwtClaimIntSlice(ctx *fiber.Ctx, name string) []int {
 	return JwtClaimIntSlice(token, name)
 }
 
-func (r *Request) GetRawBody(ctx *fiber.Ctx) []byte {
-	method := ctx.Method()
-	contentType := strings.ToLower(r.GetHeader(ctx, fiber.HeaderContentType))
+func (r *Request) GetRawBody() []byte {
+	method := r.ctx.Method()
+	contentType := strings.ToLower(r.GetHeader(fiber.HeaderContentType))
 	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
 	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
 
 	if method == "POST" && (isPostForm || isMultipartForm) {
-		formData := r.GetFormData(ctx)
+		formData := r.GetFormData()
 
 		if len(formData) < 1 {
 			return make([]byte, 0)
@@ -706,7 +656,7 @@ func (r *Request) GetRawBody(ctx *fiber.Ctx) []byte {
 	var encoding string
 	var body []byte
 
-	ctx.Request().Header.VisitAll(func(key, value []byte) {
+	r.ctx.Request().Header.VisitAll(func(key, value []byte) {
 		if utils.UnsafeString(key) == fiber.HeaderContentEncoding {
 			encoding = utils.UnsafeString(value)
 		}
@@ -714,13 +664,13 @@ func (r *Request) GetRawBody(ctx *fiber.Ctx) []byte {
 
 	switch encoding {
 	case fiber.StrGzip:
-		body, err = ctx.Request().BodyGunzip()
+		body, err = r.ctx.Request().BodyGunzip()
 	case fiber.StrBr, fiber.StrBrotli:
-		body, err = ctx.Request().BodyUnbrotli()
+		body, err = r.ctx.Request().BodyUnbrotli()
 	case fiber.StrDeflate:
-		body, err = ctx.Request().BodyInflate()
+		body, err = r.ctx.Request().BodyInflate()
 	default:
-		body = ctx.Request().Body()
+		body = r.ctx.Request().Body()
 	}
 
 	if err != nil || len(body) < 1 {
@@ -738,10 +688,10 @@ func (r *Request) GetRawBody(ctx *fiber.Ctx) []byte {
 }
 
 // @param string[]|string rules
-func (r *Request) GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
-	method := ctx.Method()
+func (r *Request) GetMap(rules ...interface{}) map[string]interface{} {
+	method := r.ctx.Method()
 	methods := []string{"POST", "PUT", "PATCH", "DELETE"}
-	contentType := strings.ToLower(ctx.Get(fiber.HeaderContentType))
+	contentType := strings.ToLower(r.ctx.Get(fiber.HeaderContentType))
 	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
 	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
 	isJson := strings.Contains(contentType, fiber.MIMEApplicationJSON)
@@ -750,23 +700,23 @@ func (r *Request) GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interf
 	map1 := map[string]interface{}{}
 
 	if method == "GET" {
-		for key, value := range r.GetQueryParams(ctx) {
+		for key, value := range r.GetQueryParams() {
 			map1[key] = value
 		}
 	} else if method == "POST" && (isPostForm || isMultipartForm) {
-		for key, value := range r.GetQueryParams(ctx) {
+		for key, value := range r.GetQueryParams() {
 			map1[key] = value
 		}
 
-		for key, value := range r.GetFormData(ctx) {
+		for key, value := range r.GetFormData() {
 			map1[key] = value
 		}
 	} else if slicex.InStringSlice(method, methods) {
 		return map1
 	} else if isJson {
-		map1 = jsonx.MapFrom(r.GetRawBody(ctx))
+		map1 = jsonx.MapFrom(r.GetRawBody())
 	} else if isXml1 || isXml2 {
-		map2 := mapx.FromXml(r.GetRawBody(ctx))
+		map2 := mapx.FromXml(r.GetRawBody())
 
 		for key, value := range map2 {
 			map1[key] = value
@@ -784,6 +734,14 @@ func (r *Request) GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interf
 	return mapx.FromRequestParam(map1, rules...)
 }
 
-func (r *Request) DtoBind(ctx *fiber.Ctx, dto interface{}) error {
-	return mapx.BindToDto(r.GetMap(ctx), dto)
+func (r *Request) DtoBind(dto interface{}) error {
+	return mapx.BindToDto(r.GetMap(), dto)
+}
+
+func (r *Request) GetUploadedFile(formFieldName string) *multipart.FileHeader {
+	if fh, err := r.ctx.FormFile(formFieldName); err != nil {
+		return fh
+	}
+
+	return nil
 }
