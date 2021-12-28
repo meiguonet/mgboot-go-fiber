@@ -312,6 +312,43 @@ func (r *Request) ParamString(name string, defaultValue ...interface{}) string {
 	return dv
 }
 
+func (r *Request) ParamStringWithSecurityMode(name string, mode int, defaultValue ...interface{}) string {
+	var dv string
+
+	if len(defaultValue) > 0 {
+		if s1, err := castx.ToStringE(defaultValue[0]); err == nil {
+			dv = s1
+		}
+	}
+
+	modes := []int{0, 1, 2}
+
+	if !slicex.InIntSlice(mode, modes) {
+		mode = 2
+	}
+
+	map1 := map[string]string{}
+
+	for name, value := range r.GetQueryParams() {
+		map1[name] = value
+	}
+
+	for name, value := range r.GetFormData() {
+		map1[name] = value
+	}
+
+	if s1, err := castx.ToStringE(map1[name]); err == nil {
+		switch mode {
+		case 1, 2:
+			s1 = stringx.StripTags(s1)
+		}
+
+		return s1
+	}
+
+	return dv
+}
+
 func (r *Request) ParamBool(name string, defaultValue ...interface{}) bool {
 	var dv bool
 
