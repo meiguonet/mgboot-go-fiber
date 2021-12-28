@@ -2,6 +2,7 @@ package mgboot
 
 import (
 	"github.com/meiguonet/mgboot-go-common/util/castx"
+	"github.com/meiguonet/mgboot-go-common/util/jsonx"
 	"strings"
 	"time"
 )
@@ -53,31 +54,20 @@ func newRateLimitSettingsFromMap(settings map[string]interface{}) *RateLimitSett
 }
 
 func newRateLimitSettingsFromString(defines string) *RateLimitSettings {
-	if strings.HasPrefix(defines, "RateLimit:") {
-		defines = strings.TrimPrefix(defines, "RateLimit:")
-	}
-
-	parts := strings.Split(defines, "~@~")
-	total := castx.ToInt(parts[0], 0)
+	defines = strings.ReplaceAll(defines, "[syh]", `"`)
+	map1 := jsonx.MapFrom(defines)
+	total := castx.ToInt(map1["total"], 0)
 	var duration time.Duration
+	n1 := castx.ToInt64(map1["duration"])
 
-	if len(parts) > 1 {
-		n1 := castx.ToInt64(parts[1], 0)
+	if n1 > 0 {
 		duration = time.Duration(n1) * time.Millisecond
-	}
-
-	var limitByIp bool
-
-	if len(parts) > 2 {
-		if b1, err := castx.ToBoolE(parts[2]); err == nil {
-			limitByIp = b1
-		}
 	}
 
 	return &RateLimitSettings{
 		total:     total,
 		duration:  duration,
-		limitByIp: limitByIp,
+		limitByIp: castx.ToBool(map1["limitByIp"]),
 	}
 }
 

@@ -2,7 +2,7 @@ package mgboot
 
 import (
 	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
-	"github.com/meiguonet/mgboot-go-common/util/castx"
+	"github.com/meiguonet/mgboot-go-common/util/jsonx"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
 	"strings"
 )
@@ -43,19 +43,28 @@ func newValidateSettingsFromMap(settings map[string]interface{}) *ValidateSettin
 }
 
 func newValidateSettingsFromString(defines string) *ValidateSettings {
-	if strings.Contains(defines, "Validate:") {
-		defines = strings.TrimPrefix(defines, "Validate:")
-	}
-
-	defines = strings.ReplaceAll(defines, "#@#", ",")
-	parts := strings.Split(defines, "~@~")
-	rules := stringx.SplitWithRegexp(parts[0], RegexConst.CommaSep)
+	defines = strings.ReplaceAll(defines, "[syh]", `"`)
+	parts := jsonx.ArrayFrom(defines)
+	rules := make([]string, 0)
 	var failfast bool
 
-	if len(parts) > 1 {
-		if b1, err := castx.ToBoolE(parts[1]); err == nil {
-			failfast = b1
+	for _, p := range parts {
+		s1, ok := p.(string)
+
+		if !ok || s1 == "" {
+			continue
 		}
+
+		if s1 == "false" {
+			continue
+		}
+
+		if s1 == "true" {
+			failfast = true
+			continue
+		}
+
+		rules = append(rules, s1)
 	}
 
 	return &ValidateSettings{rules: rules, failfast: failfast}
