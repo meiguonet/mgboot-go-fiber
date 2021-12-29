@@ -18,10 +18,6 @@ var requestLogLogger logx.Logger
 var logRequestBody bool
 var executeTimeLogLogger logx.Logger
 var errorHandlers = make([]ErrorHandler, 0)
-var handlerNameMap = map[string]string{}
-var rateLimitSettingsMap = map[string]*RateLimitSettings{}
-var jwtAuthSettingsMap = map[string]*JwtAuthSettings{}
-var validateSettingsMap = map[string]*ValidateSettings{}
 
 func RuntimeLogger(logger ...logx.Logger) logx.Logger {
 	if len(logger) > 0 {
@@ -93,16 +89,10 @@ func LogExecuteTime(ctx *fiber.Ctx) {
 		return
 	}
 
-	handlerName := FindMatchedHandlerName(req)
 	sb := strings.Builder{}
 	sb.WriteString(ctx.Method())
 	sb.WriteString(" ")
 	sb.WriteString(req.GetRequestUrl(true))
-
-	if handlerName != "" {
-		sb.WriteString(", handler: " + handlerName)
-	}
-
 	sb.WriteString(", total elapsed time: " + elapsedTime)
 	ExecuteTimeLogLogger().Info(sb.String())
 	ctx.Set("X-Response-Time", elapsedTime)
@@ -263,213 +253,6 @@ func AddPoweredBy(ctx *fiber.Ctx) {
 	ctx.Set("X-Powered-By", poweredBy)
 }
 
-func WithHandlerName(method, requestMapping, handlerName string) {
-	requestMapping = getRealRequestMapping(requestMapping)
-
-	if method == "ALL" {
-		handlerNameMap["GET@" + requestMapping] = handlerName
-		handlerNameMap["POST@" + requestMapping] = handlerName
-	} else {
-		handlerNameMap[method + "@" + requestMapping] = handlerName
-	}
-}
-
-func FindMatchedHandlerName(req *Request) string {
-	for key, value := range handlerNameMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if requestMapping == req.GetRequestUrl() {
-			return value
-		}
-	}
-
-	for key, value := range handlerNameMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if !strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if stringx.RegexMatch(req.GetRequestUrl(), requestMapping) {
-			return value
-		}
-	}
-
-	return ""
-}
-
-func WithRateLimitSettings(method, requestMapping string, settings interface{}) {
-	requestMapping = getRealRequestMapping(requestMapping)
-	st := NewRateLimitSettings(settings)
-
-	if method == "ALL" {
-		rateLimitSettingsMap["GET@" + requestMapping] = st
-		rateLimitSettingsMap["POST@" + requestMapping] = st
-	} else {
-		rateLimitSettingsMap[method + "@" + requestMapping] = st
-	}
-}
-
-func FindMatchedRateLimitSettings(req *Request) *RateLimitSettings {
-	for key, value := range rateLimitSettingsMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if requestMapping == req.GetRequestUrl() {
-			return value
-		}
-	}
-
-	for key, value := range rateLimitSettingsMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if !strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if stringx.RegexMatch(req.GetRequestUrl(), requestMapping) {
-			return value
-		}
-	}
-
-	return nil
-}
-
-func WithJwtAuthSettings(method, requestMapping, settingsKey string) {
-	requestMapping = getRealRequestMapping(requestMapping)
-	st := NewJwtAuthSettings(settingsKey)
-
-	if method == "ALL" {
-		jwtAuthSettingsMap["GET@" + requestMapping] = st
-		jwtAuthSettingsMap["POST@" + requestMapping] = st
-	} else {
-		jwtAuthSettingsMap[method + "@" + requestMapping] = st
-	}
-}
-
-func FindMatchedJwtAuthSettings(req *Request) *JwtAuthSettings {
-	for key, value := range jwtAuthSettingsMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if requestMapping == req.GetRequestUrl() {
-			return value
-		}
-	}
-
-	for key, value := range jwtAuthSettingsMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if !strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if stringx.RegexMatch(req.GetRequestUrl(), requestMapping) {
-			return value
-		}
-	}
-
-	return nil
-}
-
-func WithValidateSettings(method, requestMapping string, settings interface{}) {
-	requestMapping = getRealRequestMapping(requestMapping)
-	st := NewValidateSettings(settings)
-
-	if method == "ALL" {
-		validateSettingsMap["GET@" + requestMapping] = st
-		validateSettingsMap["POST@" + requestMapping] = st
-	} else {
-		validateSettingsMap[method + "@" + requestMapping] = st
-	}
-}
-
-func FindMatchedValidateSettings(req *Request) *ValidateSettings {
-	for key, value := range validateSettingsMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if requestMapping == req.GetRequestUrl() {
-			return value
-		}
-	}
-
-	for key, value := range validateSettingsMap {
-		method := stringx.SubstringBefore(key, "@")
-
-		if method != req.GetMethod() {
-			continue
-		}
-
-		requestMapping := stringx.SubstringAfter(key, "@")
-
-		if !strings.HasPrefix(requestMapping, "^") {
-			continue
-		}
-
-		if stringx.RegexMatch(req.GetRequestUrl(), requestMapping) {
-			return value
-		}
-	}
-
-	return nil
-}
-
 func calcElapsedTime(ctx *fiber.Ctx) string {
 	var execStart time.Time
 
@@ -489,31 +272,4 @@ func calcElapsedTime(ctx *fiber.Ctx) string {
 
 	n1 := d2.Seconds()
 	return numberx.ToDecimalString(n1, 3) + "ms"
-}
-
-func getRealRequestMapping(requestMapping string) string {
-	if !strings.Contains(requestMapping, ":") {
-		return requestMapping
-	}
-
-	parts := strings.Split(strings.Trim(requestMapping, "/"), "/")
-	sb := strings.Builder{}
-	n1 := 0
-
-	for _, p := range parts {
-		if n1 > 0 {
-			sb.WriteString("/")
-		}
-
-		if !strings.Contains(p, ":") {
-			sb.WriteString(p)
-			n1++
-			continue
-		}
-
-		sb.WriteString(`[^/]+`)
-		n1++
-	}
-
-	return "^/" + sb.String() + "$"
 }

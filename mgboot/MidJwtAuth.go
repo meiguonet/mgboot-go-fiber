@@ -9,20 +9,17 @@ import (
 	"strings"
 )
 
-func MidJwtAuth() func(ctx *fiber.Ctx) error {
+func MidJwtAuth(settingsKey string) func(ctx *fiber.Ctx) error {
 	return func(ctx *fiber.Ctx) error {
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidJwtAuth")
 		}
 
-		req := NewRequest(ctx)
-		authSettings := FindMatchedJwtAuthSettings(req)
-
-		if authSettings == nil {
+		if settingsKey == "" {
 			return ctx.Next()
 		}
 
-		settings := GetJwtSettings(authSettings.Key())
+		settings := GetJwtSettings(settingsKey)
 
 		if settings == nil {
 			return ctx.Next()
