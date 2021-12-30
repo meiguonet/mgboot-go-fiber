@@ -710,6 +710,10 @@ func (r *Request) GetRawBody() []byte {
 		body = r.ctx.Request().Body()
 	}
 
+	if err != nil {
+		RuntimeLogger().Error("get raw body error: " + err.Error())
+	}
+
 	if err != nil || len(body) < 1 {
 		return make([]byte, 0)
 	}
