@@ -4,11 +4,16 @@ import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
+	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
 	"github.com/meiguonet/mgboot-go-common/logx"
 	"github.com/meiguonet/mgboot-go-common/util/castx"
+	"github.com/meiguonet/mgboot-go-common/util/jsonx"
 	"github.com/meiguonet/mgboot-go-common/util/numberx"
 	"github.com/meiguonet/mgboot-go-common/util/slicex"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
+	"github.com/meiguonet/mgboot-go-common/util/validatex"
+	"github.com/meiguonet/mgboot-go-dal/ratelimiter"
+	"github.com/meiguonet/mgboot-go-fiber/enum/JwtVerifyErrno"
 	"mime/multipart"
 	"strings"
 	"time"
@@ -256,6 +261,156 @@ func AddPoweredBy(ctx *fiber.Ctx) {
 	ctx.Set("X-Powered-By", poweredBy)
 }
 
+func RateLimitCheck(ctx *fiber.Ctx, handlerName string, settings interface{}) error {
+	var total int
+	var duration time.Duration
+	var limitByIp bool
+
+	if map1, ok := settings.(map[string]interface{}); ok && len(map1) > 0 {
+		total = castx.ToInt(map1["total"])
+
+		if d1, ok := map1["duration"].(time.Duration); ok && d1 > 0 {
+			duration = d1
+		} else if n1, err := castx.ToInt64E(map1["duration"]); err == nil && n1 > 0 {
+			duration = time.Duration(n1) * time.Millisecond
+		}
+
+		limitByIp = castx.ToBool(map1["limitByIp"])
+	} else if s1, ok := settings.(string); ok && s1 != "" {
+		s1 = strings.ReplaceAll(s1, "[syh]", `"`)
+		map1 := jsonx.MapFrom(s1)
+
+		if len(map1) > 0 {
+			total = castx.ToInt(map1["total"])
+
+			if d1, ok := map1["duration"].(time.Duration); ok && d1 > 0 {
+				duration = d1
+			} else if n1, err := castx.ToInt64E(map1["duration"]); err == nil && n1 > 0 {
+				duration = time.Duration(n1) * time.Millisecond
+			}
+
+			limitByIp = castx.ToBool(map1["limitByIp"])
+		}
+	}
+
+	if handlerName == "" || total < 1 || duration < 1 {
+		return nil
+	}
+
+	req := NewRequest(ctx)
+	id := handlerName
+
+	if limitByIp {
+		id += "@" + req.GetClientIp()
+	}
+
+	opts := ratelimiter.NewRatelimiterOptions(RatelimiterLuaFile(), RatelimiterCacheDir())
+	limiter := ratelimiter.NewRatelimiter(id, total, duration, opts)
+	result := limiter.GetLimit()
+	remaining := castx.ToInt(result["remaining"])
+
+	if remaining < 0 {
+		return NewRateLimitError(result)
+	}
+
+	return nil
+}
+
+func JwtAuthCheck(ctx *fiber.Ctx, settingsKey string) error {
+	if settingsKey == "" {
+		return nil
+	}
+
+	settings := GetJwtSettings(settingsKey)
+
+	if settings == nil {
+		return nil
+	}
+
+	token := strings.TrimSpace(ctx.Get(fiber.HeaderAuthorization))
+	token = stringx.RegexReplace(token, RegexConst.SpaceSep, " ")
+
+	if strings.Contains(token, " ") {
+		token = stringx.SubstringAfter(token, " ")
+	}
+
+	if token == "" {
+		return NewJwtAuthError(JwtVerifyErrno.NotFound)
+	}
+
+	errno := VerifyJsonWebToken(token, settings)
+
+	if errno < 0 {
+		return NewJwtAuthError(errno)
+	}
+
+	return nil
+}
+
+func ValidateCheck(ctx *fiber.Ctx, settings interface{}) error {
+	rules := make([]string, 0)
+	var failfast bool
+
+	if items, ok := settings.([]string); ok && len(items) > 0 {
+		for _, s1 := range items {
+			if s1 == "" || s1 == "false" {
+				continue
+			}
+
+			if s1 == "true" {
+				failfast = true
+				continue
+			}
+
+			rules = append(rules, s1)
+		}
+	} else if s1, ok := settings.(string); ok && s1 != "" {
+		s1 = strings.ReplaceAll(s1, "[syh]", `"`)
+		entries := jsonx.ArrayFrom(s1)
+
+		for _, entry := range entries {
+			s2, ok := entry.(string)
+
+			if !ok || s2 == "" || s2 == "false" {
+				continue
+			}
+
+			if s2 == "true" {
+				failfast = true
+				continue
+			}
+
+			rules = append(rules, s2)
+		}
+	}
+
+	if len(rules) < 1 {
+		return nil
+	}
+
+	validator := validatex.NewValidator()
+	req := NewRequest(ctx)
+	data := req.GetMap()
+
+	if failfast {
+		errorTips := validatex.FailfastValidate(validator, data, rules)
+
+		if errorTips != "" {
+			return NewValidateError(errorTips, true)
+		}
+
+		return nil
+	}
+
+	validateErrors := validatex.Validate(validator, data, rules)
+
+	if len(validateErrors) > 0 {
+		return NewValidateError(validateErrors)
+	}
+
+	return nil
+}
+
 func CheckUploadedFile(fh *multipart.FileHeader, opts map[string]interface{}) (passed bool, errorTips string) {
 	if fh == nil {
 		errorTips = "没有文件被上传"
@@ -342,7 +497,13 @@ func CheckUploadedFile(fh *multipart.FileHeader, opts map[string]interface{}) (p
 	return
 }
 
-func SendOutput(ctx *fiber.Ctx, payload ResponsePayload) error {
+func SendOutput(ctx *fiber.Ctx, payload ResponsePayload, err error) error {
+	if err != nil {
+		handler := DefaultErrorHandler()
+		_ = handler(ctx, err)
+		return nil
+	}
+
 	LogExecuteTime(ctx)
 	AddCorsSupport(ctx)
 	AddPoweredBy(ctx)
