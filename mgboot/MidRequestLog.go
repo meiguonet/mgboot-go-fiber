@@ -9,11 +9,11 @@ import (
 
 func MidRequestLog() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
-		ctx.Locals("ExecStart", time.Now())
-
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidRequestLog")
 		}
+
+		ctx.Locals("ExecStart", time.Now())
 
 		if !RequestLogEnabled() {
 			return ctx.Next()

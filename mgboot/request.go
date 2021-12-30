@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/utils"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
 	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
 	"github.com/meiguonet/mgboot-go-common/util/castx"
@@ -689,43 +688,17 @@ func (r *Request) GetRawBody() []byte {
 		return make([]byte, 0)
 	}
 
-	var err error
-	var encoding string
-	var body []byte
+	rrb := r.ctx.Locals("requestRawBody")
 
-	r.ctx.Request().Header.VisitAll(func(key, value []byte) {
-		if utils.UnsafeString(key) == fiber.HeaderContentEncoding {
-			encoding = utils.UnsafeString(value)
+	if buf, ok := rrb.([]byte); ok && len(buf) > 0 {
+		if AppConf.GetBoolean("logging.logGetRawBody") {
+			RuntimeLogger().Debug("raw body: " + string(buf))
 		}
-	})
 
-	switch encoding {
-	case fiber.StrGzip:
-		body, err = r.ctx.Request().BodyGunzip()
-	case fiber.StrBr, fiber.StrBrotli:
-		body, err = r.ctx.Request().BodyUnbrotli()
-	case fiber.StrDeflate:
-		body, err = r.ctx.Request().BodyInflate()
-	default:
-		body = r.ctx.Request().Body()
+		return buf
 	}
 
-	if err != nil {
-		RuntimeLogger().Error("get raw body error: " + err.Error())
-	}
-
-	if err != nil || len(body) < 1 {
-		return make([]byte, 0)
-	}
-
-	buf := make([]byte, 0, len(body))
-	copy(body, buf)
-
-	if AppConf.GetBoolean("logging.logGetRawBody") {
-		RuntimeLogger().Debug("raw body: " + string(buf))
-	}
-
-	return buf
+	return make([]byte, 0)
 }
 
 // @param string[]|string rules
