@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func MidValidate(arg0 interface{}) func(ctx *fiber.Ctx) error {
+func MidValidate(arg0 interface{}) fiber.Handler {
 	rules := make([]string, 0)
 	var failfast bool
 

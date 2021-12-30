@@ -9,9 +9,12 @@ import (
 	"github.com/meiguonet/mgboot-go-common/util/numberx"
 	"github.com/meiguonet/mgboot-go-common/util/slicex"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
+	"mime/multipart"
 	"strings"
 	"time"
 )
+
+type ImageInfoGetFunc func(fh *multipart.FileHeader) map[string]interface{}
 
 var runtimeLogger logx.Logger
 var requestLogLogger logx.Logger
@@ -251,6 +254,133 @@ func AddPoweredBy(ctx *fiber.Ctx) {
 	}
 
 	ctx.Set("X-Powered-By", poweredBy)
+}
+
+func CheckUploadedFile(fh *multipart.FileHeader, opts map[string]interface{}) (passed bool, errorTips string) {
+	if fh == nil {
+		errorTips = "没有文件被上传"
+		return
+	}
+
+	var maxFileSize int64
+
+	if s1, ok := opts["fileSizeLimit"]; ok && s1 != "" {
+		maxFileSize = castx.ToDataSize(s1)
+	}
+
+	if maxFileSize > 0 && fh.Size > maxFileSize {
+		errorTips = "文件大小超出限制"
+		return
+	}
+
+	if !castx.ToBool(opts["checkImage"]) {
+		return
+	}
+
+	var fn ImageInfoGetFunc
+
+	if f1, ok := opts["imageInfoFunc"].(ImageInfoGetFunc); ok {
+		fn = f1
+	}
+
+	if fn == nil {
+		return
+	}
+
+	map1 := fn(fh)
+	width := castx.ToInt(map1["width"])
+	height := castx.ToInt(map1["height"])
+	mimeType := castx.ToString(map1["mimeType"])
+
+	if width < 1 || height < 1 || mimeType == "" {
+		errorTips = "不是有效的图片文件"
+		return
+	}
+
+	imageSizeLimit := castx.ToString(opts["imageSizeLimit"])
+
+	if imageSizeLimit != "" {
+		var n1 int
+		var n2 int
+		parts := stringx.SplitWithRegexp(strings.TrimSpace(imageSizeLimit), `[\x20\t]*x[\x20\t]*`)
+
+		if len(parts) >= 2 {
+			n1 = castx.ToInt(parts[0])
+			n2 = castx.ToInt(parts[1])
+		}
+
+		if n1 > 0 && n2 > 0 && (width != n1 || height != n2) {
+			errorTips = fmt.Sprintf("请上传%dx%d的图片", n1, n2)
+			return
+		}
+	}
+
+	imageRatioLimit := castx.ToString(opts["imageRatioLimit"])
+
+	if imageRatioLimit != "" {
+		var n1 int
+		var n2 int
+		parts := stringx.SplitWithRegexp(strings.TrimSpace(imageRatioLimit), `[\x20\t]*:[\x20\t]*`)
+
+		if len(parts) >= 2 {
+			n1 = castx.ToInt(parts[0])
+			n2 = castx.ToInt(parts[1])
+		}
+
+		if n1 > 0 && n2 > 0 {
+			n3 := numberx.Ojld(width, height)
+			n4 := width / n3
+			n5 := height / n3
+
+			if n4 != n1 || n5 != n2 {
+				errorTips = fmt.Sprintf("请上传%d:%d比例的图片", n1, n2)
+				return
+			}
+		}
+	}
+
+	return
+}
+
+func SendOutput(ctx *fiber.Ctx, payload ResponsePayload) error {
+	LogExecuteTime(ctx)
+	AddCorsSupport(ctx)
+	AddPoweredBy(ctx)
+
+	if payload == nil {
+		ctx.Type("html", "utf8")
+		ctx.SendString("unsupported response payload found")
+		return nil
+	}
+
+	statusCode, contents := payload.GetContents()
+
+	if statusCode >= 400 {
+		ctx.Type("html", "utf8")
+		ctx.Status(500).Send([]byte{})
+		return nil
+	}
+
+	if pl, ok := payload.(AttachmentResponse); ok {
+		pl.AddSpecifyHeaders(ctx)
+		ctx.Send(pl.Buffer())
+		return nil
+	}
+
+	if pl, ok := payload.(ImageResponse); ok {
+		ctx.Set(fiber.HeaderContentType, pl.GetContentType())
+		ctx.Send(pl.Buffer())
+		return nil
+	}
+
+	contentType := payload.GetContentType()
+
+	if contentType != "" {
+		ctx.Set(fiber.HeaderContentType, contentType)
+	}
+
+	ctx.SendString(contents)
+	return nil
 }
 
 func calcElapsedTime(ctx *fiber.Ctx) string {

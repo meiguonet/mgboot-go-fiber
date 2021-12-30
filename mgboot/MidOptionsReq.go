@@ -5,7 +5,7 @@ import (
 	"github.com/meiguonet/mgboot-go-common/AppConf"
 )
 
-func MidOptionsReq() func(ctx *fiber.Ctx) error {
+func MidOptionsReq() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidOptionsReq")

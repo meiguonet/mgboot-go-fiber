@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func MidRateLimit(handlerName string, settings interface{}) func(ctx *fiber.Ctx) error {
+func MidRateLimit(handlerName string, settings interface{}) fiber.Handler {
 	var total int
 	var duration time.Duration
 	var limitByIp bool

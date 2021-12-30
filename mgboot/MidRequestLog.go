@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func MidRequestLog() func(ctx *fiber.Ctx) error {
+func MidRequestLog() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidRequestLog")

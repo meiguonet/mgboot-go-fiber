@@ -6,7 +6,7 @@ import (
 	"github.com/meiguonet/mgboot-go-common/AppConf"
 )
 
-func MidRecover() func(ctx *fiber.Ctx) error {
+func MidRecover() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidRecover")

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func MidJwtAuth(settingsKey string) func(ctx *fiber.Ctx) error {
+func MidJwtAuth(settingsKey string) fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidJwtAuth")
