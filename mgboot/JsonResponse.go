@@ -21,13 +21,17 @@ func (p JsonResponse) GetContentType() string {
 func (p JsonResponse) GetContents() (statusCode int, contents string) {
 	statusCode = 200
 
-	if s1, ok := p.payload.(string); ok && p.isJson(s1) {
-		contents = s1
-		return
+	if s1, ok := p.payload.(string); ok {
+		s1 = strings.TrimSpace(s1)
+
+		if p.isJson(s1) {
+			contents = s1
+			return
+		}
 	}
 
 	opts := jsonx.NewToJsonOption().HandleTimeField().StripZeroTimePart()
-	contents = jsonx.ToJson(p.payload, opts)
+	contents = strings.TrimSpace(jsonx.ToJson(p.payload, opts))
 
 	if !p.isJson(contents) {
 		contents = "{}"
