@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
+	"github.com/meiguonet/mgboot-go-common/util/castx"
 	"github.com/meiguonet/mgboot-go-common/util/slicex"
 	"io"
 	"strings"
@@ -40,21 +41,11 @@ func MidRawBodyInjector() fiber.Handler {
 			return ctx.Next()
 		}
 
-		buf := make([]byte, 0, 1024)
-		rawBody := make([]byte, 0)
+		buf := make([]byte, 0, 64 * 1024 * 1024)
 
-		for {
-			n1, err := reader.Read(buf)
-
-			if err != nil {
-				break
-			}
-
-			rawBody = append(rawBody, buf[:n1]...)
-		}
-
-		if len(rawBody) > 0 {
-			ctx.Locals("requestRawBody", rawBody)
+		if n1, err := reader.WriteTo(bytes.NewBuffer(buf)); err == nil && n1 > 0 {
+			n2 := castx.ToInt(n1)
+			ctx.Locals("requestRawBody", buf[:n2])
 		}
 
 		return ctx.Next()
