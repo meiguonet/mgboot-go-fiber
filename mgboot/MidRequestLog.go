@@ -4,10 +4,13 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
 	"strings"
+	"time"
 )
 
 func MidRequestLog() fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
+		ctx.Locals("ExecStart", time.Now())
+
 		if AppConf.GetBoolean("logging.logMiddlewareRun") {
 			RuntimeLogger().Info("middleware run: mgboot.MidRequestLog")
 		}

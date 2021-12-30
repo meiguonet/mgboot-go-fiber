@@ -1,7 +1,6 @@
 package taskx
 
 import (
-	"context"
 	"fmt"
 	"github.com/gomodule/redigo/redis"
 	"github.com/meiguonet/mgboot-go-common/util/errorx"
@@ -30,50 +29,49 @@ func (h *redismqNormalTaskHandler) Run() {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	conn, err := poolx.GetRedisConnection(ctx)
-
-	if err != nil {
-		return
-	}
-
-	defer conn.Close()
 	cacheKey := cachex.CacheKeyRedismqNormal()
 	payloads := make([]string, 0)
-	wg := sync.WaitGroup{}
-	wg.Add(10)
-	mu := sync.Mutex{}
 
-	for i := 1; i <= 10; i++ {
-		go func() {
-			defer wg.Done()
-			payload, _ := redis.String(conn.Do("LPOP", cacheKey))
+	for {
+		if len(payloads) >= 10 {
+			break
+		}
 
-			if payload == "" {
-				return
-			}
+		conn, err := poolx.GetRedisConnection()
 
-			mu.Lock()
+		if err != nil {
+			break
+		}
+
+		payload, _ := redis.String(conn.Do("LPOP", cacheKey))
+		conn.Close()
+
+		if payload != "" {
 			payloads = append(payloads, payload)
-			mu.Unlock()
-		}()
+		}
+
+		time.Sleep(50 * time.Millisecond)
 	}
 
-	wg.Wait()
+	n1 := len(payloads)
 
-	if len(payloads) < 1 {
+	if n1 < 1 {
 		return
 	}
 
-	wg = sync.WaitGroup{}
-	wg.Add(len(payloads))
+	if n1 == 1 {
+		RunMqTask(payloads[0])
+		return
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(n1)
 
 	for _, payload := range payloads {
-		go func(payload string) {
+		go func(wg *sync.WaitGroup, payload string) {
 			defer wg.Done()
 			RunMqTask(payload)
-		}(payload)
+		}(wg, payload)
 	}
 
 	wg.Wait()
