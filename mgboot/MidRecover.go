@@ -12,8 +12,6 @@ func MidRecover() fiber.Handler {
 			RuntimeLogger().Info("middleware run: mgboot.MidRecover")
 		}
 
-		var err error
-
 		defer func() {
 			r := recover()
 
@@ -21,14 +19,18 @@ func MidRecover() fiber.Handler {
 				return
 			}
 
+			var err error
+
 			if ex, ok := r.(error); ok {
 				err = ex
 			} else {
 				err = fmt.Errorf("%v", r)
 			}
+
+			handler := DefaultErrorHandler()
+			_ = handler(ctx, err)
 		}()
 
-		err = ctx.Next()
-		return err
+		return ctx.Next()
 	}
 }

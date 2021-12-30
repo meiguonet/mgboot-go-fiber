@@ -2,12 +2,15 @@ package taskx
 
 import (
 	"context"
+	"fmt"
 	"github.com/gomodule/redigo/redis"
 	"github.com/meiguonet/mgboot-go-common/enum/DatetimeFormat"
 	"github.com/meiguonet/mgboot-go-common/util/castx"
+	"github.com/meiguonet/mgboot-go-common/util/errorx"
 	"github.com/meiguonet/mgboot-go-common/util/jsonx"
 	"github.com/meiguonet/mgboot-go-dal/poolx"
 	"github.com/meiguonet/mgboot-go-fiber/cachex"
+	"github.com/meiguonet/mgboot-go-fiber/mgboot"
 	"sync"
 	"time"
 )
@@ -16,6 +19,20 @@ type redismqDelayableTaskHandler struct {
 }
 
 func (h *redismqDelayableTaskHandler) Run() {
+	defer func() {
+		if r := recover(); r != nil {
+			var err error
+
+			if ex, ok := r.(error); ok {
+				err = ex
+			} else {
+				err = fmt.Errorf("%v", r)
+			}
+
+			mgboot.RuntimeLogger().Error(errorx.Stacktrace(err))
+		}
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	conn, err := poolx.GetRedisConnection(ctx)
