@@ -138,13 +138,12 @@ func (r *Request) GetQueryString(urlencode ...bool) string {
 }
 
 func (r *Request) GetRequestUrl(withQueryString ...bool) string {
-	buf := r.ctx.Request().URI().Path()
-	var s1 string
+	s1 := r.ctx.Request().URI().String()
 
-	if len(buf) < 1 {
+	if s1 == "" {
 		s1 = "/"
 	} else {
-		s1 = stringx.EnsureLeft(string(buf), "/")
+		s1 = stringx.EnsureLeft(s1, "/")
 	}
 
 	if len(withQueryString) > 0 && withQueryString[0] {

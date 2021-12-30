@@ -1,13 +1,9 @@
 package mgboot
 
 import (
-	"bufio"
-	"bytes"
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
-	"github.com/meiguonet/mgboot-go-common/util/castx"
 	"github.com/meiguonet/mgboot-go-common/util/slicex"
-	"io"
 	"strings"
 	"time"
 )
@@ -35,17 +31,13 @@ func MidRawBodyInjector() fiber.Handler {
 			return ctx.Next()
 		}
 
-		reader := bufio.NewReader(bytes.NewReader([]byte{}))
+		if len(ctx.Body()) > 0 {
+			buf := make([]byte, 0, 64 * 1024 * 1024)
+			n1 := copy(buf, ctx.Body())
 
-		if err := ctx.Request().ReadLimitBody(reader, 64 * 1024 * 1024); err != nil && err != io.EOF {
-			return ctx.Next()
-		}
-
-		buf := make([]byte, 0, 64 * 1024 * 1024)
-
-		if n1, err := reader.WriteTo(bytes.NewBuffer(buf)); err == nil && n1 > 0 {
-			n2 := castx.ToInt(n1)
-			ctx.Locals("requestRawBody", buf[:n2])
+			if n1 > 0 {
+				ctx.Locals("requestRawBody", buf[:n1])
+			}
 		}
 
 		return ctx.Next()
