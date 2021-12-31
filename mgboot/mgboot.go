@@ -20,7 +20,7 @@ import (
 
 type ImageInfoGetFunc func(fh *multipart.FileHeader) map[string]interface{}
 
-var Version = "1.1.6"
+var Version = "1.1.7"
 var errorHandlers = make([]ErrorHandler, 0)
 
 func LogExecuteTime(ctx *fiber.Ctx) {
