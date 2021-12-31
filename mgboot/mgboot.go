@@ -20,7 +20,7 @@ import (
 
 type ImageInfoGetFunc func(fh *multipart.FileHeader) map[string]interface{}
 
-var Version = "1.1.7"
+var Version = "1.1.8"
 var errorHandlers = make([]ErrorHandler, 0)
 
 func LogExecuteTime(ctx *fiber.Ctx) {
@@ -420,10 +420,10 @@ func calcElapsedTime(ctx *fiber.Ctx) string {
 
 	n1 = n1.Mul(n1, big.NewFloat(1000.0))
 
-	if n1.Cmp(big.NewFloat(0.001)) == -1 {
-		return "0.001ms"
+	if n1.Cmp(big.NewFloat(1.0)) == -1 {
+		return "0ms"
 	}
 
 	msecs, _ := n1.Float64()
-	return numberx.ToDecimalString(msecs, 3) + "ms"
+	return fmt.Sprintf("%dms", castx.ToInt(msecs))
 }
