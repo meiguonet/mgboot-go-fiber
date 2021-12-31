@@ -5,11 +5,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
 	"github.com/meiguonet/mgboot-go-common/enum/RegexConst"
-	"github.com/meiguonet/mgboot-go-common/logx"
 	"github.com/meiguonet/mgboot-go-common/util/castx"
 	"github.com/meiguonet/mgboot-go-common/util/jsonx"
 	"github.com/meiguonet/mgboot-go-common/util/numberx"
-	"github.com/meiguonet/mgboot-go-common/util/slicex"
 	"github.com/meiguonet/mgboot-go-common/util/stringx"
 	"github.com/meiguonet/mgboot-go-common/util/validatex"
 	"github.com/meiguonet/mgboot-go-dal/ratelimiter"
@@ -21,76 +19,14 @@ import (
 
 type ImageInfoGetFunc func(fh *multipart.FileHeader) map[string]interface{}
 
-var runtimeLogger logx.Logger
-var requestLogLogger logx.Logger
-var logRequestBody bool
-var executeTimeLogLogger logx.Logger
+var Version = "1.1.6"
 var errorHandlers = make([]ErrorHandler, 0)
-
-func RuntimeLogger(logger ...logx.Logger) logx.Logger {
-	if len(logger) > 0 {
-		runtimeLogger = logger[0]
-	}
-
-	l := runtimeLogger
-
-	if l == nil {
-		l = NewNoopLogger()
-	}
-
-	return l
-}
-
-func RequestLogLogger(logger ...logx.Logger) logx.Logger {
-	if len(logger) > 0 {
-		requestLogLogger = logger[0]
-	}
-
-	l := requestLogLogger
-
-	if l == nil {
-		l = NewNoopLogger()
-	}
-
-	return l
-}
-
-func RequestLogEnabled() bool {
-	return requestLogLogger != nil
-}
-
-func LogRequestBody(flag ...bool) bool {
-	if len(flag) > 0 {
-		logRequestBody = flag[0]
-	}
-
-	return logRequestBody
-}
-
-func ExecuteTimeLogLogger(logger ...logx.Logger) logx.Logger {
-	if len(logger) > 0 {
-		executeTimeLogLogger = logger[0]
-	}
-
-	l := executeTimeLogLogger
-
-	if l == nil {
-		l = NewNoopLogger()
-	}
-
-	return l
-}
-
-func ExecuteTimeLogEnabled() bool {
-	return executeTimeLogLogger != nil
-}
 
 func LogExecuteTime(ctx *fiber.Ctx) {
 	if !ExecuteTimeLogEnabled() {
 		return
 	}
 
-	req := NewRequest(ctx)
 	elapsedTime := calcElapsedTime(ctx)
 
 	if elapsedTime == "" {
@@ -100,7 +36,7 @@ func LogExecuteTime(ctx *fiber.Ctx) {
 	sb := strings.Builder{}
 	sb.WriteString(ctx.Method())
 	sb.WriteString(" ")
-	sb.WriteString(req.GetRequestUrl(true))
+	sb.WriteString(GetRequestUrl(ctx, true))
 	sb.WriteString(", total elapsed time: " + elapsedTime)
 	ExecuteTimeLogLogger().Info(sb.String())
 	ctx.Set("X-Response-Time", elapsedTime)
@@ -172,85 +108,6 @@ func ErrorHandlers() []ErrorHandler {
 	return errorHandlers
 }
 
-func NeedCorsSupport(ctx *fiber.Ctx) bool {
-	req := NewRequest(ctx)
-	methods := []string{"PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"}
-
-	if slicex.InStringSlice(ctx.Method(), methods) {
-		return true
-	}
-
-	contentType := strings.ToLower(ctx.Get(fiber.HeaderContentType))
-
-	if strings.Contains(contentType, fiber.MIMEApplicationForm) ||
-		strings.Contains(contentType, fiber.MIMEMultipartForm) ||
-		strings.Contains(contentType, fiber.MIMETextPlain) {
-		return true
-	}
-
-	headerNames := []string{
-		"Accept",
-		"Accept-Language",
-		"Content-Language",
-		"DPR",
-		"Downlink",
-		"Save-Data",
-		"Viewport-Widt",
-		"Width",
-	}
-
-	for headerName := range req.GetHeaders() {
-		if slicex.InStringSlice(headerName, headerNames) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func AddCorsSupport(ctx *fiber.Ctx) {
-	if !NeedCorsSupport(ctx) {
-		return
-	}
-	
-	settings := GetCorsSettings()
-	
-	if settings == nil {
-		return
-	}
-
-	allowedOrigins := settings.AllowedOrigins()
-
-	if slicex.InStringSlice("*", allowedOrigins) {
-		ctx.Set("Access-Control-Allow-Origin", "*")
-	} else {
-		ctx.Set("Access-Control-Allow-Origin", strings.Join(allowedOrigins, ", "))
-	}
-
-	allowedHeaders := settings.AllowedHeaders()
-
-	if len(allowedHeaders) > 0 {
-		ctx.Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
-	}
-
-	exposedHeaders := settings.ExposedHeaders()
-
-	if len(exposedHeaders) > 0 {
-		ctx.Set("Access-Control-Expose-Headers", strings.Join(exposedHeaders, ", "))
-	}
-
-	maxAge := settings.MaxAge()
-
-	if maxAge > 0 {
-		n1 := castx.ToInt64(maxAge.Seconds())
-		ctx.Set("Access-Control-Max-Age", fmt.Sprintf("%d", n1))
-	}
-
-	if settings.AllowCredentials() {
-		ctx.Set("Access-Control-Allow-Credentials", "true")
-	}
-}
-
 func AddPoweredBy(ctx *fiber.Ctx) {
 	poweredBy := AppConf.GetString("app.poweredBy")
 
@@ -297,11 +154,10 @@ func RateLimitCheck(ctx *fiber.Ctx, handlerName string, settings interface{}) er
 		return nil
 	}
 
-	req := NewRequest(ctx)
 	id := handlerName
 
 	if limitByIp {
-		id += "@" + req.GetClientIp()
+		id += "@" + GetClientIp(ctx)
 	}
 
 	opts := ratelimiter.NewRatelimiterOptions(RatelimiterLuaFile(), RatelimiterCacheDir())
@@ -389,8 +245,7 @@ func ValidateCheck(ctx *fiber.Ctx, settings interface{}) error {
 	}
 
 	validator := validatex.NewValidator()
-	req := NewRequest(ctx)
-	data := req.GetMap()
+	data := GetMap(ctx)
 
 	if failfast {
 		errorTips := validatex.FailfastValidate(validator, data, rules)
@@ -505,7 +360,6 @@ func SendOutput(ctx *fiber.Ctx, payload ResponsePayload, err error) error {
 	}
 
 	LogExecuteTime(ctx)
-	AddCorsSupport(ctx)
 	AddPoweredBy(ctx)
 
 	if payload == nil {

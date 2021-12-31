@@ -3,14 +3,13 @@ package mgboot
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/util/errorx"
-	"strings"
 )
 
 func DefaultErrorHandler() func(ctx *fiber.Ctx, err error) error {
 	return func(ctx *fiber.Ctx, err error) error {
-		if ex, ok := err.(*fiber.Error); ok && strings.Contains(ex.Error(), "Method Not Allowed") {
+		if ex, ok := err.(*fiber.Error); ok && ex.Code == fiber.StatusMethodNotAllowed {
 			ctx.Type("html", "utf8")
-			ctx.Status(405).Send([]byte{})
+			ctx.Status(fiber.StatusMethodNotAllowed ).Send([]byte{})
 			return nil
 		}
 
@@ -26,12 +25,11 @@ func DefaultErrorHandler() func(ctx *fiber.Ctx, err error) error {
 
 		LogExecuteTime(ctx)
 		AddPoweredBy(ctx)
-		AddCorsSupport(ctx)
 
 		if handler == nil {
 			RuntimeLogger().Error(errorx.Stacktrace(err))
 			ctx.Type("html", "utf8")
-			ctx.Status(500).Send([]byte{})
+			ctx.Status(fiber.StatusInternalServerError).Send([]byte{})
 			return nil
 		}
 
@@ -44,7 +42,7 @@ func DefaultErrorHandler() func(ctx *fiber.Ctx, err error) error {
 
 		if statusCode >= 400 {
 			ctx.Type("html", "utf8")
-			ctx.Status(500).Send([]byte{})
+			ctx.Status(statusCode).Send([]byte{})
 			return nil
 		}
 

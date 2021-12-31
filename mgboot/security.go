@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-errors/errors"
+	"github.com/gofiber/fiber/v2"
 	"github.com/meiguonet/mgboot-go-common/AppConf"
 	"github.com/meiguonet/mgboot-go-common/util/castx"
 	"github.com/meiguonet/mgboot-go-common/util/fsx"
@@ -210,18 +211,22 @@ func BuildJsonWebToken(arg0 interface{}, isRefreshToken bool, claims ...map[stri
 	return
 }
 
-// @param *jwt.Token|string arg0
-func JwtClaimString(arg0 interface{}, name string, defaultValue ...string) string {
+// @param *jwt.Token|*fiber.Ctx|string arg0
+func JwtClaim(arg0 interface{}, name string, defaultValue ...interface{}) string {
 	var dv string
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if s1, err := castx.ToStringE(defaultValue[0]); err == nil {
+			dv = s1
+		}
 	}
 
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -244,18 +249,22 @@ func JwtClaimString(arg0 interface{}, name string, defaultValue ...string) strin
 	return dv
 }
 
-// @param *jwt.Token|string arg0
-func JwtClaimBool(arg0 interface{}, name string, defaultValue ...bool) bool {
+// @param *jwt.Token|*fiber.Ctx|string arg0
+func JwtClaimBool(arg0 interface{}, name string, defaultValue ...interface{}) bool {
 	var dv bool
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if b1, err := castx.ToBoolE(defaultValue[0]); err == nil {
+			dv = b1
+		}
 	}
 
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -278,18 +287,22 @@ func JwtClaimBool(arg0 interface{}, name string, defaultValue ...bool) bool {
 	return dv
 }
 
-// @param *jwt.Token|string arg0
-func JwtClaimInt(arg0 interface{}, name string, defaultValue ...int) int {
+// @param *jwt.Token|*fiber.Ctx|string arg0
+func JwtClaimInt(arg0 interface{}, name string, defaultValue ...interface{}) int {
 	dv := math.MinInt32
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if n1, err := castx.ToIntE(defaultValue[0]); err == nil {
+			dv = n1
+		}
 	}
 
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -312,18 +325,22 @@ func JwtClaimInt(arg0 interface{}, name string, defaultValue ...int) int {
 	return dv
 }
 
-// @param *jwt.Token|string arg0
-func JwtClaimInt64(arg0 interface{}, name string, defaultValue ...int64) int64 {
+// @param *jwt.Token|*fiber.Ctx|string arg0
+func JwtClaimInt64(arg0 interface{}, name string, defaultValue ...interface{}) int64 {
 	dv := int64(math.MinInt64)
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if n1, err := castx.ToInt64E(defaultValue[0]); err == nil {
+			dv = n1
+		}
 	}
 
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -346,18 +363,22 @@ func JwtClaimInt64(arg0 interface{}, name string, defaultValue ...int64) int64 {
 	return dv
 }
 
-// @param *jwt.Token|string arg0
-func JwtClaimFloat32(arg0 interface{}, name string, defaultValue ...float32) float32 {
+// @param *jwt.Token|*fiber.Ctx|string arg0
+func JwtClaimFloat32(arg0 interface{}, name string, defaultValue ...interface{}) float32 {
 	dv := float32(math.SmallestNonzeroFloat32)
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if n1, err := castx.ToFloat32E(defaultValue[0]); err == nil {
+			dv = n1
+		}
 	}
 
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -380,18 +401,22 @@ func JwtClaimFloat32(arg0 interface{}, name string, defaultValue ...float32) flo
 	return dv
 }
 
-// @param *jwt.Token|string arg0
-func JwtClaimFloat64(arg0 interface{}, name string, defaultValue ...float64) float64 {
+// @param *jwt.Token|*fiber.Ctx|string arg0
+func JwtClaimFloat64(arg0 interface{}, name string, defaultValue ...interface{}) float64 {
 	dv := math.SmallestNonzeroFloat64
 
 	if len(defaultValue) > 0 {
-		dv = defaultValue[0]
+		if n1, err := castx.ToFloat64E(defaultValue[0]); err == nil {
+			dv = n1
+		}
 	}
 
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -414,12 +439,14 @@ func JwtClaimFloat64(arg0 interface{}, name string, defaultValue ...float64) flo
 	return dv
 }
 
-// @param *jwt.Token|string arg0
+// @param *jwt.Token|*fiber.Ctx|string arg0
 func JwtClaimStringSlice(arg0 interface{}, name string) []string {
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk
@@ -438,12 +465,14 @@ func JwtClaimStringSlice(arg0 interface{}, name string) []string {
 	return castx.ToStringSlice(claims[name])
 }
 
-// @param *jwt.Token|string arg0
+// @param *jwt.Token|*fiber.Ctx|string arg0
 func JwtClaimIntSlice(arg0 interface{}, name string) []int {
 	var token *jwt.Token
 
 	if tk, ok := arg0.(*jwt.Token); ok {
 		token = tk
+	} else if ctx, ok := arg0.(*fiber.Ctx); ok {
+		token = GetJwt(ctx)
 	} else if s1, ok := arg0.(string); ok && s1 != "" {
 		tk, _ := ParseJsonWebToken(s1)
 		token = tk

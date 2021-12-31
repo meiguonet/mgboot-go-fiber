@@ -19,18 +19,17 @@ func MidRequestLog() fiber.Handler {
 			return ctx.Next()
 		}
 
-		req := NewRequest(ctx)
 		logger := RequestLogLogger()
 		sb := strings.Builder{}
 		sb.WriteString(ctx.Method())
 		sb.WriteString(" ")
-		sb.WriteString(req.GetRequestUrl(true))
+		sb.WriteString(GetRequestUrl(ctx, true))
 		sb.WriteString(" from ")
-		sb.WriteString(req.GetClientIp())
+		sb.WriteString(GetClientIp(ctx))
 		logger.Info(sb.String())
 
 		if LogRequestBody() {
-			rawBody := req.GetRawBody()
+			rawBody := GetRawBody(ctx)
 
 			if len(rawBody) > 0 {
 				logger.Debugf(string(rawBody))
