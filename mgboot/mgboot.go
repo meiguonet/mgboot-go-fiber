@@ -12,6 +12,7 @@ import (
 	"github.com/meiguonet/mgboot-go-common/util/validatex"
 	"github.com/meiguonet/mgboot-go-dal/ratelimiter"
 	"github.com/meiguonet/mgboot-go-fiber/enum/JwtVerifyErrno"
+	"math/big"
 	"mime/multipart"
 	"strings"
 	"time"
@@ -401,20 +402,28 @@ func SendOutput(ctx *fiber.Ctx, payload ResponsePayload, err error) error {
 func calcElapsedTime(ctx *fiber.Ctx) string {
 	var execStart time.Time
 
-	if d1, ok := ctx.Locals("ExecStart").(time.Time); ok {
-		execStart = d1
+	if t1, ok := ctx.Locals("ExecStart").(time.Time); ok {
+		ctx.Locals("ExecStart", nil)
+		execStart = t1
 	}
 
 	if execStart.IsZero() {
 		return ""
 	}
 
-	d2 := time.Now().Sub(execStart)
+	n1 := big.NewFloat(time.Since(execStart).Seconds())
 
-	if d2 < time.Second {
-		return fmt.Sprintf("%dms", d2)
+	if n1.Cmp(big.NewFloat(1.0)) != -1 {
+		secs, _ := n1.Float64()
+		return numberx.ToDecimalString(secs, 3) + "s"
 	}
 
-	n1 := d2.Seconds()
-	return numberx.ToDecimalString(n1, 3) + "ms"
+	n1 = n1.Mul(n1, big.NewFloat(1000.0))
+
+	if n1.Cmp(big.NewFloat(0.001)) == -1 {
+		return "0.001ms"
+	}
+
+	msecs, _ := n1.Float64()
+	return numberx.ToDecimalString(msecs, 3) + "ms"
 }
