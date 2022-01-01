@@ -312,7 +312,7 @@ func ReqParam(ctx *fiber.Ctx, name string, mode int, defaultValue ...interface{}
 		mode = ReqParamSecurityMode.StripTags
 	}
 
-	value := ctx.FormValue(name)
+	value := formParam(ctx, name)
 
 	if value == "" {
 		value = ctx.Query(name)
@@ -595,6 +595,26 @@ func GetUploadedFile(ctx *fiber.Ctx, formFieldName string) *multipart.FileHeader
 	return nil
 }
 
+func formParam(ctx *fiber.Ctx, key string) string {
+	buf := ctx.Request().PostArgs().Peek(key)
+
+	if len(buf) > 0 {
+		return string(utils.CopyBytes(buf))
+	}
+
+	mf, err := ctx.Request().MultipartForm()
+
+	if err == nil && mf != nil {
+		values := mf.Value[key]
+
+		if len(values) > 0 {
+			return values[0]
+		}
+	}
+
+	return ""
+}
+
 func getMapWithRules(arg0 interface{}, rules []string) map[string]interface{} {
 	var ctx *fiber.Ctx
 	var srcMap map[string]interface{}
@@ -657,7 +677,7 @@ func getMapWithRules(arg0 interface{}, rules []string) map[string]interface{} {
 		var paramValue interface{}
 
 		if ctx != nil {
-			paramValue = ctx.FormValue(srcKey)
+			paramValue = formParam(ctx, srcKey)
 
 			if paramValue == "" {
 				paramValue = ctx.Query(srcKey)
