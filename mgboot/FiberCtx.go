@@ -654,7 +654,7 @@ func getMapWithRules(arg0 interface{}, rules []string) map[string]interface{} {
 			dstKey = stringx.SubstringAfter(s1, "#")
 		}
 
-		var paramValue string
+		var paramValue interface{}
 
 		if ctx != nil {
 			paramValue = ctx.FormValue(srcKey)
@@ -663,17 +663,17 @@ func getMapWithRules(arg0 interface{}, rules []string) map[string]interface{} {
 				paramValue = ctx.Query(srcKey)
 			}
 		} else if len(srcMap) > 0 {
-			if s1, ok := srcMap[srcKey].(string); ok {
-				paramValue = s1
-			}
+			paramValue = srcMap[srcKey]
 		}
 
 		switch typ {
 		case 1:
+			value := castx.ToString(paramValue)
+
 			if mode != 0 {
-				dstMap[dstKey] = stringx.StripTags(paramValue)
+				dstMap[dstKey] = stringx.StripTags(value)
 			} else {
-				dstMap[dstKey] = paramValue
+				dstMap[dstKey] = value
 			}
 		case 2:
 			var value int
