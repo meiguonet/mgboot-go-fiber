@@ -490,16 +490,10 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 	isJson := (isPost || isPut || isPatch || isDelete) && ctx.Is("json")
 
 	if isJson {
-		buf := utils.CopyBytes(ctx.Body())
+		map1 := map[string]interface{}{}
 
-		if len(buf) < 1 {
-			return map[string]interface{}{}
-		}
-
-		map1 := jsonx.MapFrom(buf)
-
-		if len(map1) < 1 {
-			return map[string]interface{}{}
+		if len(ctx.Body()) > 0 {
+			map1 = jsonx.MapFrom(utils.CopyBytes(ctx.Body()))
 		}
 
 		if len(_rules) < 1 {
@@ -512,16 +506,10 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 	isXml := (isPost || isPut || isPatch || isDelete) && ctx.Is("xml")
 
 	if isXml {
-		buf := utils.CopyBytes(ctx.Body())
+		map1 := map[string]string{}
 
-		if len(buf) < 1 {
-			return map[string]interface{}{}
-		}
-
-		map1 := mapx.FromXml(buf)
-
-		if len(map1) < 1 {
-			return map[string]interface{}{}
+		if len(ctx.Body()) > 0 {
+			map1 = mapx.FromXml(utils.CopyBytes(ctx.Body()))
 		}
 
 		if len(_rules) < 1 {
@@ -533,10 +521,6 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 
 	if isGet {
 		map1 := GetQueryParams(ctx)
-
-		if len(map1) < 1 {
-			return map[string]interface{}{}
-		}
 
 		if len(_rules) < 1 {
 			return castx.ToStringMap(map1)
@@ -561,7 +545,7 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 		return getMapWithRules(ctx, _rules)
 	}
 
-	map1 := map[string]string{}
+	map1 := map[string]interface{}{}
 	queryParams := GetQueryParams(ctx)
 
 	for key, value := range queryParams {
@@ -574,7 +558,7 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 		map1[key] = value
 	}
 
-	return castx.ToStringMap(map1)
+	return map1
 }
 
 func DtoBind(ctx *fiber.Ctx, dto interface{}) error {
