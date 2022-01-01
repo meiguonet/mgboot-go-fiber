@@ -28,27 +28,57 @@ func GetHeader(ctx *fiber.Ctx, name string) string {
 	return ctx.Get(name)
 }
 
+func GetHeaders(ctx *fiber.Ctx) map[string]string {
+	map1 := map[string]string{}
+
+	ctx.Request().Header.VisitAll(func(keyBytes, valueBytes []byte) {
+		var key string
+
+		if len(keyBytes) > 0 {
+			key = string(utils.CopyBytes(keyBytes))
+		}
+
+		if key == "" {
+			return
+		}
+
+		var value string
+
+		if len(valueBytes) > 0 {
+			value = string(utils.CopyBytes(valueBytes))
+		}
+
+		map1[key] = value
+	})
+
+	return map1
+}
+
 func GetQueryParams(ctx *fiber.Ctx) map[string]string {
 	s1 := utils.CopyString(ctx.OriginalURL())
-	
+
 	if !strings.Contains(s1, "?") {
 		return map[string]string{}
 	}
-	
+
 	values, err := url.ParseQuery(stringx.SubstringAfter(s1, "?"))
-	
+
 	if err != nil || len(values) < 1 {
 		return map[string]string{}
 	}
-	
+
 	map1 := map[string]string{}
 	
 	for key, parts := range values {
-		if key == "" || len(parts) < 1 {
+		if key == "" {
 			continue
 		}
-		
-		map1[key] = parts[0]
+
+		if len(parts) > 0 {
+			map1[key] = parts[0]
+		} else {
+			map1[key] = ""
+		}
 	}
 	
 	return map1
@@ -56,12 +86,12 @@ func GetQueryParams(ctx *fiber.Ctx) map[string]string {
 
 func GetQueryString(ctx *fiber.Ctx, urlencode ...bool) string {
 	if len(urlencode) < 1 || !urlencode[0] {
-		s1 := ctx.OriginalURL()
+		s1 := utils.CopyString(ctx.OriginalURL())
 
 		if !strings.Contains(s1, "?") {
 			return ""
 		}
-		
+
 		return stringx.SubstringAfter(s1, "?")
 	}
 	
@@ -102,25 +132,60 @@ func GetRequestUrl(ctx *fiber.Ctx, withQueryString ...bool) string {
 
 func GetFormData(ctx *fiber.Ctx) map[string]string {
 	map1 := map[string]string{}
-	contentType := ctx.Get(fiber.HeaderContentType)
-	contentTypes := []string{fiber.MIMEApplicationForm, fiber.MIMEMultipartForm}
+	isPost := ctx.Request().Header.IsPost()
 
-	if ctx.Method() != "POST" || !slicex.InStringSlice(contentType, contentTypes) {
+	if !isPost {
 		return map1
 	}
 
-	form, err := ctx.MultipartForm()
+	contentType := strings.ToLower(ctx.Get(fiber.HeaderContentType))
+	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
+	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
 
-	if err != nil {
+	if isPostForm {
+		ctx.Request().PostArgs().VisitAll(func(keyBytes, valueBytes []byte) {
+			var key string
+
+			if len(keyBytes) > 0 {
+				key = string(utils.CopyBytes(keyBytes))
+			}
+
+			if key == "" {
+				return
+			}
+
+			var value string
+
+			if len(valueBytes) > 0 {
+				value = string(utils.CopyBytes(valueBytes))
+			}
+
+			map1[key] = value
+		})
+
 		return map1
 	}
 
-	for key, values := range form.Value {
-		if len(values) < 1 {
-			continue
+	if isMultipartForm {
+		form, err := ctx.MultipartForm()
+
+		if err != nil {
+			return map1
 		}
 
-		map1[key] = values[0]
+		for key, values := range form.Value {
+			if key == "" {
+				continue
+			}
+
+			if len(values) > 0 {
+				map1[key] = values[0]
+			} else {
+				map1[key] = ""
+			}
+		}
+
+		return map1
 	}
 
 	return map1
@@ -351,58 +416,58 @@ func GetJwt(ctx *fiber.Ctx) *jwt.Token {
 }
 
 func GetRawBody(ctx *fiber.Ctx) []byte {
-	method := ctx.Method()
+	isPost := ctx.Request().Header.IsPost()
+	isPut := ctx.Request().Header.IsPut()
+	isPatch := ctx.Request().Header.IsPatch()
+	isDelete := ctx.Request().Header.IsDelete()
+	isJson := (isPost || isPut || isPatch || isDelete) && ctx.Is("json")
+	isXml := (isPost || isPut || isPatch || isDelete) && ctx.Is("xml")
+
+	if isJson || isXml {
+		if len(ctx.Body()) < 1 {
+			return make([]byte, 0)
+		}
+
+		buf := utils.CopyBytes(ctx.Body())
+
+		if AppConf.GetBoolean("logging.logGetRawBody") {
+			RuntimeLogger().Debug("raw body: " + string(buf))
+		}
+
+		return buf
+	}
+
 	contentType := strings.ToLower(ctx.Get(fiber.HeaderContentType))
 	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
 	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
 
-	if method == "POST" && (isPostForm || isMultipartForm) {
-		formData := GetFormData(ctx)
-
-		if len(formData) < 1 {
-			return make([]byte, 0)
-		}
-
-		values := url.Values{}
-
-		for name, value := range formData {
-			values[name] = []string{value}
-		}
-
-		contents := values.Encode()
-
-		if AppConf.GetBoolean("logging.logGetRawBody") {
-			RuntimeLogger().Debug("raw body via form data: " + contents)
-		}
-
-		return []byte(contents)
-	}
-
-	methods := []string{"POST", "PUT", "PATCH", "DELETE"}
-
-	if !slicex.InStringSlice(method, methods) {
+	if !isPost {
 		return make([]byte, 0)
 	}
 
-	isJson := strings.Contains(contentType, fiber.MIMEApplicationJSON)
-	isXml1 := strings.Contains(contentType, fiber.MIMEApplicationXML)
-	isXml2 := strings.Contains(contentType, fiber.MIMETextXML)
-
-	if !isJson && !isXml1 && !isXml2 {
+	if !isPostForm && !isMultipartForm {
 		return make([]byte, 0)
 	}
 
-	buf := utils.CopyBytes(ctx.Body())
+	formData := GetFormData(ctx)
 
-	if len(buf) < 1 {
+	if len(formData) < 1 {
 		return make([]byte, 0)
 	}
+
+	values := url.Values{}
+
+	for name, value := range formData {
+		values[name] = []string{value}
+	}
+
+	contents := values.Encode()
 
 	if AppConf.GetBoolean("logging.logGetRawBody") {
-		RuntimeLogger().Debug("raw body: " + string(buf))
+		RuntimeLogger().Debug("raw body via form data: " + contents)
 	}
 
-	return buf
+	return []byte(contents)
 }
 
 func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
@@ -417,153 +482,198 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 		}
 	}
 
-	method := ctx.Method()
-	methods := []string{"POST", "PUT", "PATCH", "DELETE"}
-	contentType := strings.ToLower(ctx.Get(fiber.HeaderContentType))
-	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
-	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
-	isJson := strings.Contains(contentType, fiber.MIMEApplicationJSON)
-	isXml1 := strings.Contains(contentType, fiber.MIMEApplicationXML)
-	isXml2 := strings.Contains(contentType, fiber.MIMETextXML)
-	var jsonMap map[string]interface{}
-	var xmlMap map[string]string
+	isGet := ctx.Request().Header.IsGet()
+	isPost := ctx.Request().Header.IsPost()
+	isPut := ctx.Request().Header.IsPut()
+	isPatch := ctx.Request().Header.IsPatch()
+	isDelete := ctx.Request().Header.IsDelete()
+	isJson := (isPost || isPut || isPatch || isDelete) && ctx.Is("json")
 
-	if slicex.InStringSlice(method, methods) {
-		buf := GetRawBody(ctx)
+	if isJson {
+		buf := utils.CopyBytes(ctx.Body())
 
-		if len(buf) > 0 {
-			if isJson {
-				jsonMap = jsonx.MapFrom(GetRawBody(ctx))
-			}
-
-			if isXml1 || isXml2 {
-				xmlMap = mapx.FromXml(GetRawBody(ctx))
-			}
-		}
-	}
-
-	if slicex.InStringSlice(method, methods) && isJson {
-		if len(jsonMap) < 1 {
-			jsonMap = map[string]interface{}{}
+		if len(buf) < 1 {
+			return map[string]interface{}{}
 		}
 
-		if len(_rules) < 1 {
-			return jsonMap
+		map1 := jsonx.MapFrom(buf)
+
+		if len(map1) < 1 {
+			return map[string]interface{}{}
 		}
-
-		return mapx.FromRequestParam(jsonMap, _rules)
-	}
-
-	if slicex.InStringSlice(method, methods) && (isXml1 || isXml2) {
-		map1 := castx.ToStringMap(xmlMap)
 
 		if len(_rules) < 1 {
 			return map1
 		}
 
-		return mapx.FromRequestParam(map1, _rules)
+		return getMapWithRules(map1, _rules)
 	}
 
-	if method != "POST" || (!isPostForm && !isMultipartForm) {
+	isXml := (isPost || isPut || isPatch || isDelete) && ctx.Is("xml")
+
+	if isXml {
+		buf := utils.CopyBytes(ctx.Body())
+
+		if len(buf) < 1 {
+			return map[string]interface{}{}
+		}
+
+		map1 := mapx.FromXml(buf)
+
+		if len(map1) < 1 {
+			return map[string]interface{}{}
+		}
+
+		if len(_rules) < 1 {
+			return castx.ToStringMap(map1)
+		}
+
+		return getMapWithRules(castx.ToStringMap(map1), _rules)
+	}
+
+	if isGet {
+		map1 := GetQueryParams(ctx)
+
+		if len(map1) < 1 {
+			return map[string]interface{}{}
+		}
+
+		if len(_rules) < 1 {
+			return castx.ToStringMap(map1)
+		}
+
+		return getMapWithRules(castx.ToStringMap(map1), _rules)
+	}
+
+	if !isPost {
 		return map[string]interface{}{}
 	}
 
-	if len(_rules) < 1 {
-		map1 := map[string]interface{}{}
-		queryParams := GetQueryParams(ctx)
+	contentType := strings.ToLower(ctx.Get(fiber.HeaderContentType))
+	isPostForm := strings.Contains(contentType, fiber.MIMEApplicationForm)
+	isMultipartForm := strings.Contains(contentType, fiber.MIMEMultipartForm)
 
-		for key, value := range queryParams {
-			map1[key] = value
-		}
-
-		formData := GetFormData(ctx)
-
-		for key, value := range formData {
-			map1[key] = value
-		}
-
-		return map1
+	if !isPostForm && !isMultipartForm {
+		return map[string]interface{}{}
 	}
 
-	map1 := map[string]interface{}{}
-	dstKeys := make([]string, 0)
-
-	for idx, rule := range _rules {
-		if strings.Contains(rule, "#") {
-			dstKeys = append(dstKeys, stringx.SubstringBefore(rule, "#"))
-			_rules[idx] = stringx.SubstringAfter(rule, "#")
-		} else {
-			dstKeys = append(dstKeys, "")
-		}
+	if len(_rules) > 0 {
+		return getMapWithRules(ctx, _rules)
 	}
 
+	map1 := map[string]string{}
+	queryParams := GetQueryParams(ctx)
+
+	for key, value := range queryParams {
+		map1[key] = value
+	}
+
+	formData := GetFormData(ctx)
+
+	for key, value := range formData {
+		map1[key] = value
+	}
+
+	return castx.ToStringMap(map1)
+}
+
+func DtoBind(ctx *fiber.Ctx, dto interface{}) error {
+	map1 := GetMap(ctx)
+
+	if len(map1) < 1 {
+		map1 = map[string]interface{}{"__UnknowKey__": ""}
+	}
+
+	return mapx.BindToDto(map1, dto)
+}
+
+func GetUploadedFile(ctx *fiber.Ctx, formFieldName string) *multipart.FileHeader {
+	if fh, err := ctx.FormFile(formFieldName); err != nil {
+		return fh
+	}
+
+	return nil
+}
+
+func getMapWithRules(arg0 interface{}, rules []string) map[string]interface{} {
+	var ctx *fiber.Ctx
+	var srcMap map[string]interface{}
+
+	if _ctx, ok := arg0.(*fiber.Ctx); ok && _ctx != nil {
+		ctx = _ctx
+	} else if map1, ok := arg0.(map[string]interface{}); ok && len(map1) > 0 {
+		srcMap = map1
+	}
+
+	dstMap := map[string]interface{}{}
 	re1 := regexp.MustCompile(`:[^:]+$`)
 	re2 := regexp.MustCompile(`:[0-9]+$`)
 
-	for idx, rule := range _rules {
-		name := rule
+	for _, s1 := range rules {
 		typ := 1
 		mode := 2
 		dv := ""
 
-		if strings.HasPrefix(name, "i:") {
-			name = stringx.SubstringAfter(name, ":")
+		if strings.HasPrefix(s1, "i:") {
+			s1 = strings.TrimPrefix(s1, "i:")
 			typ = 2
 
-			if re1.MatchString(name) {
-				dv = stringx.SubstringAfterLast(name, ":")
-				name = re1.ReplaceAllString(name, "")
+			if re1.MatchString(s1) {
+				dv = stringx.SubstringAfterLast(s1, ":")
+				s1 = stringx.SubstringBeforeLast(s1, ":")
 			}
-		} else if strings.HasPrefix(name, "d:") {
-			name = stringx.SubstringAfter(name, ":")
+		} else if strings.HasPrefix(s1, "d:") {
+			s1 = strings.TrimPrefix(s1, "d:")
 			typ = 3
 
-			if re1.MatchString(name) {
-				dv = stringx.SubstringAfterLast(name, ":")
-				name = re1.ReplaceAllString(name, "")
+			if re1.MatchString(s1) {
+				dv = stringx.SubstringAfterLast(s1, ":")
+				s1 = stringx.SubstringBeforeLast(s1, ":")
 			}
-		} else if strings.HasPrefix(name, "s:") {
-			name = stringx.SubstringAfter(name, ":")
+		} else if strings.HasPrefix(s1, "s:") {
+			s1 = strings.TrimPrefix(s1, "s:")
 
-			if re2.MatchString(name) {
-				s1 := stringx.SubstringAfterLast(name, ":")
-				mode = castx.ToInt(s1, 2)
-				name = re2.ReplaceAllString(name, "")
+			if re2.MatchString(s1) {
+				mode = castx.ToInt(stringx.SubstringAfterLast(s1, ":"), 2)
+				s1 = stringx.SubstringBeforeLast(s1, ":")
 			}
-		} else if re2.MatchString(name) {
-			s1 := stringx.SubstringAfterLast(name, ":")
-			mode = castx.ToInt(s1, 2)
-			name = re2.ReplaceAllString(name, "")
+		} else if re2.MatchString(s1) {
+			mode = castx.ToInt(stringx.SubstringAfterLast(s1, ":"), 2)
+			s1 = stringx.SubstringBeforeLast(s1, ":")
 		}
 
-		if strings.Contains(name, ":") {
-			name = stringx.SubstringBefore(name, ":")
-		}
-
-		if name == "" {
+		if s1 == "" || strings.Contains(s1, ":") {
 			continue
 		}
 
-		var dstKey string
+		srcKey := s1
+		dstKey := s1
 
-		if dstKeys[idx] != "" {
-			dstKey = dstKeys[idx]
-		} else {
-			dstKey = name
+		if strings.Contains(s1, "#") {
+			srcKey = stringx.SubstringBefore(s1, "#")
+			dstKey = stringx.SubstringAfter(s1, "#")
 		}
 
-		paramValue := ctx.FormValue(dstKey)
+		var paramValue string
 
-		if paramValue == "" {
-			paramValue = ctx.Query(dstKey)
+		if ctx != nil {
+			paramValue = ctx.FormValue(srcKey)
+
+			if paramValue == "" {
+				paramValue = ctx.Query(srcKey)
+			}
+		} else if len(srcMap) > 0 {
+			if s1, ok := srcMap[srcKey].(string); ok {
+				paramValue = s1
+			}
 		}
 
 		switch typ {
 		case 1:
 			if mode != 0 {
-				map1[dstKey] = stringx.StripTags(paramValue)
+				dstMap[dstKey] = stringx.StripTags(paramValue)
 			} else {
-				map1[dstKey] = paramValue
+				dstMap[dstKey] = paramValue
 			}
 		case 2:
 			var value int
@@ -574,7 +684,7 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 				value = castx.ToInt(paramValue)
 			}
 
-			map1[dstKey] = value
+			dstMap[dstKey] = value
 		case 3:
 			var value float64
 
@@ -584,21 +694,9 @@ func GetMap(ctx *fiber.Ctx, rules ...interface{}) map[string]interface{} {
 				value = castx.ToFloat64(paramValue)
 			}
 
-			map1[dstKey] = numberx.ToDecimalString(value)
+			dstMap[dstKey] = numberx.ToDecimalString(value)
 		}
 	}
 
-	return map1
-}
-
-func DtoBind(ctx *fiber.Ctx, dto interface{}) error {
-	return mapx.BindToDto(GetMap(ctx), dto)
-}
-
-func GetUploadedFile(ctx *fiber.Ctx, formFieldName string) *multipart.FileHeader {
-	if fh, err := ctx.FormFile(formFieldName); err != nil {
-		return fh
-	}
-
-	return nil
+	return dstMap
 }
